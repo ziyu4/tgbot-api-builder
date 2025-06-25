@@ -59,7 +59,7 @@ RUN cmake .. \
 
 RUN ninja -j$(nproc) telegram-bot-api
 RUN strip --strip-all telegram-bot-api
-RUN tar xvf telegram-bot-api.tar.gz telegram-bot-api
+RUN tar czf telegram-bot-api.tar.gz telegram-bot-api
 
 FROM scratch
 COPY --from=builder /src/build/telegram-bot-api.tar.gz /telegram-bot-api.tar.gz
