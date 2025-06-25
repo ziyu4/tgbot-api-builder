@@ -1,44 +1,7 @@
 FROM alpine:3.20 AS builder
 
 RUN apk add --no-cache \
-  git cmake make gperf build-base \
-  linux-headers binutils patchelf upx \
-  curl autoconf libtool automake sed perl ninja
-
-WORKDIR /deps
-RUN curl -sSL https://github.com/jemalloc/jemalloc/releases/download/5.3.0/jemalloc-5.3.0.tar.bz2 | tar xj
-WORKDIR /deps/jemalloc-5.3.0
-RUN ./configure --disable-shared --enable-static --with-pic && \
-    make -j$(nproc) && make install
-
-WORKDIR /deps
-RUN curl -sSL https://zlib.net/zlib-1.3.1.tar.gz | tar xz
-WORKDIR /deps/zlib-1.3.1
-RUN ./configure --static && make -j$(nproc) && make install
-
-WORKDIR /deps
-RUN curl -sSL https://www.openssl.org/source/openssl-1.1.1w.tar.gz | tar xz
-WORKDIR /deps/openssl-1.1.1w
-RUN ./Configure linux-x86_64 \
-    no-shared no-dso no-hw no-engine no-async no-tests no-pinshared \
-    -fPIC -static --prefix=/usr/local --openssldir=/usr/local/ssl && \
-    make -j$(nproc) && make install_sw
-
-ENV CFLAGS="-Os -flto -ffunction-sections -fdata-sections -fomit-frame-pointer -fno-stack-protector -march=x86-64 -mtune=generic -DNDEBUG -DTD_HAVE_ATOMIC=1"
-ENV CXXFLAGS="$CFLAGS -fno-rtti -fno-exceptions -fvisibility-inlines-hidden -std=c++17"
-ENV LDFLAGS="-static -flto -Wl,--gc-sections -Wl,--strip-all -Wl,--as-needed -Wl,-z,norelro -Wl,-z,now -Wl,--build-id=none -L/usr/local/lib -lssl -lcrypto -ldl -lpthread -lz -ljemalloc"
-
-WORKDIR /src
-RUN git clone --recursive --depth=1 https://github.com/tdlight-team/tdlight-telegram-bot-api.git .
-
-RUN sed -i '1i#define TD_OPTIMIZE_MEMORY 1\n#define TD_REQUEST_TIMEOUT 30\n#define TD_MAX_PENDING_UPDATES 50\n' telegram-bot-api/Client.cpp
-RUN sed -i '4iadd_definitions(-DTD_OPTIMIZE_MEMORY=1 -DTD_MAX_PENDING_UPDATES=50 -DTD_REQUEST_TIMEOUT=30 -DTD_HAVE_ATOMIC=1 -DNDEBUG)\n' CMakeLists.txt
-
-WORKDIR /src/build
-FROM alpine:3.20 AS builder
-
-RUN apk add --no-cache \
-  git cmake make gperf build-base \
+  git cmake ninja make gperf build-base \
   linux-headers binutils patchelf upx \
   curl autoconf libtool automake sed perl
 
@@ -92,12 +55,6 @@ RUN cmake .. \
   -DBUILD_SHARED_LIBS=OFF
 
 RUN ninja -j$(nproc) telegram-bot-api
-
-RUN strip --strip-all telegram-bot-api
-
-FROM scratch
-COPY --from=builder /src/build/telegram-bot-api /telegram-bot-api--parallel $(nproc)
-
 RUN strip --strip-all telegram-bot-api
 
 FROM scratch
