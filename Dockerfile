@@ -23,8 +23,8 @@ RUN curl -sSL https://www.openssl.org/source/openssl-1.1.1w.tar.gz -o openssl.ta
     ./Configure linux-x86_64 \
       no-shared no-dso no-hw no-engine no-async no-tests no-pinshared \
       -fPIC -static \
-      --prefix=/usr/local \
-      --openssldir=/usr/local/ssl && \
+      --prefix=/opt/openssl \
+      --openssldir=/etc/ssl && \
     make -j$(nproc) && make install_sw
 
 ENV CFLAGS="-Os -flto -ffunction-sections -fdata-sections -fomit-frame-pointer -fno-stack-protector -march=x86-64 -mtune=generic -DNDEBUG -DTD_HAVE_ATOMIC=1"
@@ -47,9 +47,9 @@ RUN cmake .. \
   -DCMAKE_FIND_LIBRARY_SUFFIXES=".a" \
   -DZLIB_LIBRARY=/usr/local/lib/libz.a \
   -DZLIB_INCLUDE_DIR=/usr/local/include \
-  -DOPENSSL_CRYPTO_LIBRARY=/usr/local/lib/libcrypto.a \
-  -DOPENSSL_SSL_LIBRARY=/usr/local/lib/libssl.a \
-  -DOPENSSL_INCLUDE_DIR=/usr/local/include \
+  -DOPENSSL_CRYPTO_LIBRARY=/opt/openssl/lib/libcrypto.a \
+  -DOPENSSL_SSL_LIBRARY=/opt/openssl/lib/libssl.a \
+  -DOPENSSL_INCLUDE_DIR=/opt/openssl/include \
   -DOPENSSL_USE_STATIC_LIBS=TRUE \
   -DJEMALLOC_LIBRARY=/usr/local/lib/libjemalloc.a \
   -DJEMALLOC_INCLUDE_DIR=/usr/local/include \
