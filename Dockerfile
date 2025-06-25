@@ -23,7 +23,7 @@ RUN curl -sSL https://www.openssl.org/source/openssl-1.1.1w.tar.gz -o openssl.ta
     ./Configure linux-x86_64 \
       no-shared no-dso no-hw no-engine no-async no-tests no-pinshared \
       -fPIC -static \
-      --prefix=/opt/openssl \
+      --prefix=/usr/local \
       --openssldir=/etc/ssl && \
     make -j$(nproc) && make install_sw
 
@@ -47,9 +47,9 @@ RUN cmake .. \
   -DCMAKE_FIND_LIBRARY_SUFFIXES=".a" \
   -DZLIB_LIBRARY=/usr/local/lib/libz.a \
   -DZLIB_INCLUDE_DIR=/usr/local/include \
-  -DOPENSSL_CRYPTO_LIBRARY=/opt/openssl/lib/libcrypto.a \
-  -DOPENSSL_SSL_LIBRARY=/opt/openssl/lib/libssl.a \
-  -DOPENSSL_INCLUDE_DIR=/opt/openssl/include \
+  -DOPENSSL_CRYPTO_LIBRARY=/usr/local/lib/libcrypto.a \
+  -DOPENSSL_SSL_LIBRARY=/usr/local/lib/libssl.a \
+  -DOPENSSL_INCLUDE_DIR=/usr/local/include \
   -DOPENSSL_USE_STATIC_LIBS=TRUE \
   -DJEMALLOC_LIBRARY=/usr/local/lib/libjemalloc.a \
   -DJEMALLOC_INCLUDE_DIR=/usr/local/include \
@@ -59,6 +59,7 @@ RUN cmake .. \
 
 RUN ninja -j$(nproc) telegram-bot-api
 RUN strip --strip-all telegram-bot-api
+RUN tar xvf telegram-bot-api.tar.gz telegram-bot-api
 
 FROM scratch
-COPY --from=builder /src/build/telegram-bot-api /telegram-bot-api
+COPY --from=builder /src/build/telegram-bot-api.tar.gz /telegram-bot-api.tar.gz
