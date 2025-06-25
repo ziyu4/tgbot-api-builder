@@ -19,13 +19,14 @@ RUN ./configure --static && make -j$(nproc) && make install
 WORKDIR /deps
 RUN curl -sSL https://www.openssl.org/source/openssl-1.1.1w.tar.gz | tar xz
 WORKDIR /deps/openssl-1.1.1w
-RUN ./Configure linux-x86_64 no-shared no-dso no-hw no-engine no-async no-tests -fPIC -static \
-    --prefix=/usr/local --openssldir=/usr/local/ssl && \
+RUN ./Configure linux-x86_64 \
+    no-shared no-dso no-hw no-engine no-async no-tests no-pinshared \
+    -fPIC -static --prefix=/usr/local --openssldir=/usr/local/ssl && \
     make -j$(nproc) && make install_sw
 
 ENV CFLAGS="-Os -flto -ffunction-sections -fdata-sections -fomit-frame-pointer -fno-stack-protector -march=x86-64 -mtune=generic -DNDEBUG -DTD_HAVE_ATOMIC=1"
 ENV CXXFLAGS="$CFLAGS -fno-rtti -fno-exceptions -fvisibility-inlines-hidden -std=c++17"
-ENV LDFLAGS="-static -flto -Wl,--gc-sections -Wl,--strip-all -Wl,--as-needed -Wl,-z,norelro -Wl,-z,now -Wl,--build-id=none -L/usr/local/lib"
+ENV LDFLAGS="-static -flto -Wl,--gc-sections -Wl,--strip-all -Wl,--as-needed -Wl,-z,norelro -Wl,-z,now -Wl,--build-id=none -L/usr/local/lib -lssl -lcrypto -ldl -lpthread -lz -ljemalloc"
 
 WORKDIR /src
 RUN git clone --recursive --depth=1 https://github.com/tdlight-team/tdlight-telegram-bot-api.git .
@@ -38,13 +39,14 @@ RUN cmake .. \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_C_FLAGS="$CFLAGS" \
   -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
-  -DCMAKE_EXE_LINKER_FLAGS="$LDFLAGS -ljemalloc -lssl -lcrypto -lz" \
+  -DCMAKE_EXE_LINKER_FLAGS="$LDFLAGS" \
   -DCMAKE_FIND_LIBRARY_SUFFIXES=".a" \
   -DZLIB_LIBRARY=/usr/local/lib/libz.a \
   -DZLIB_INCLUDE_DIR=/usr/local/include \
   -DOPENSSL_CRYPTO_LIBRARY=/usr/local/lib/libcrypto.a \
   -DOPENSSL_SSL_LIBRARY=/usr/local/lib/libssl.a \
   -DOPENSSL_INCLUDE_DIR=/usr/local/include \
+  -DOPENSSL_USE_STATIC_LIBS=TRUE \
   -DJEMALLOC_LIBRARY=/usr/local/lib/libjemalloc.a \
   -DJEMALLOC_INCLUDE_DIR=/usr/local/include \
   -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON \
