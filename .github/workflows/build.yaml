@@ -59,10 +59,9 @@ jobs:
             -F "parse_mode=MarkdownV2" \
           "https://api.telegram.org/bot$TELEGRAM_TOKEN/sendDocument")
 
-          cat response.txt
-
           if [ "$response" != "200" ]; then
             echo "Error: Telegram API responded with status $response"
+            cat response.txt
             exit 1
           fi
           
