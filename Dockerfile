@@ -56,4 +56,4 @@ RUN cmake --build . --target telegram-bot-api --parallel $(nproc)
 RUN strip --strip-all telegram-bot-api
 
 FROM scratch
-COPY --from=builder /src/build/telegram-bot-api-final /telegram-bot-api
+COPY --from=builder /src/build/telegram-bot-api /telegram-bot-api
