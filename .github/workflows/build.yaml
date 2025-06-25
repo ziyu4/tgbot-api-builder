@@ -1,0 +1,68 @@
+name: TG Bot API Builder
+  
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        run: docker build -t tg-bot-api-builder .
+
+      - name: Extract bundle
+        run: |
+          id=$(docker create tg-bot-api-builder sh)
+          docker cp "$id:/telegram-bot-api" .
+          docker rm -v "$id"
+          
+      - name: Generate SHA256 Checksum
+        id: checksum
+        run: |
+          echo "FILE_SHA256=$(sha256sum telegram-bot-api | awk '{print $1}')" >> $GITHUB_ENV
+
+      - name: Upload to Telegram
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set -euo pipefail
+          FILENAME='telegram-bot-api'
+          CAPTION=`'${{ env.FILE_SHA256 }}`'
+
+          ls -lh "$FILENAME"
+          file "$FILENAME"
+
+          if [ ! -f "$FILENAME" ]; then
+            echo "Error: $FILENAME does not exist."
+            exit 1
+          fi
+
+          if [ -z "$TELEGRAM_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "Error: TELEGRAM_TOKEN or TELEGRAM_CHAT_ID is not set."
+            exit 1
+          fi
+
+          response=$(curl -s -w "%{http_code}" -o response.txt -X POST \
+            -F "chat_id=$TELEGRAM_CHAT_ID" \
+            -F "document=@${FILENAME}" \
+            -F "caption=${CAPTION}" \
+            -F "parse_mode=MarkdownV2" \
+          "https://api.telegram.org/bot$TELEGRAM_TOKEN/sendDocument")
+
+          cat response.txt
+
+          if [ "$response" != "200" ]; then
+            echo "Error: Telegram API responded with status $response"
+            exit 1
+          fi
+          
