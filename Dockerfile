@@ -53,8 +53,7 @@ RUN cmake .. \
 
 RUN cmake --build . --target telegram-bot-api --parallel $(nproc)
 
-RUN strip --strip-all telegram-bot-api && \
-  upx --best --lzma -o telegram-bot-api-final telegram-bot-api || cp telegram-bot-api telegram-bot-api-final
+RUN strip --strip-all telegram-bot-api
 
 FROM scratch
 COPY --from=builder /src/build/telegram-bot-api-final /telegram-bot-api
