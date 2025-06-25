@@ -22,13 +22,13 @@ jobs:
       - name: Extract bundle
         run: |
           id=$(docker create tg-bot-api-builder sh)
-          docker cp "$id:/telegram-bot-api" .
+          docker cp "$id:/telegram-bot-api.tar.gz" .
           docker rm -v "$id"
           
       - name: Generate SHA256 Checksum
         id: checksum
         run: |
-          echo "FILE_SHA256=$(sha256sum telegram-bot-api | awk '{print $1}')" >> $GITHUB_ENV
+          echo "FILE_SHA256=$(sha256sum telegram-bot-api.tar.gz | awk '{print $1}')" >> $GITHUB_ENV
 
       - name: Upload to Telegram
         env:
@@ -36,7 +36,7 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           set -euo pipefail
-          FILENAME='telegram-bot-api'
+          FILENAME='telegram-bot-api.tar.gz'
           CAPTION='`${{ env.FILE_SHA256 }}`'
 
           ls -lh "$FILENAME"
