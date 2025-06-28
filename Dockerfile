@@ -1,7 +1,7 @@
 FROM debian:stable-slim AS base
 RUN apt-get update && apt-get install -y --no-install-recommends \
   build-essential yasm nasm autoconf automake cmake git libtool \
-  pkg-config ca-certificates wget meson ninja-build c2man
+  pkg-config ca-certificates wget meson ninja-build
 
 ENV PREFIX="/ffmpeg_build"
 ENV PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig"
@@ -92,8 +92,9 @@ RUN ./autogen.sh && ./configure --prefix=$PREFIX --disable-shared --enable-stati
   CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" && make -j$(nproc) && make install
 
 WORKDIR /build/fribidi
-RUN git clone --depth=1 https://github.com/fribidi/fribidi.git .
-RUN ./autogen.sh && ./configure --prefix=$PREFIX --disable-shared --enable-static --disable-docs \
+RUN wget https://github.com/fribidi/fribidi/releases/download/v1.0.16/fribidi-1.0.16.tar.xz
+RUN tar -xf fribidi-1.0.16.tar.xz --strip-components=1
+RUN ./configure --prefix=$PREFIX --disable-shared --enable-static --disable-docs \
   CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" && make -j$(nproc) && make install
 
 WORKDIR /build/freetype
