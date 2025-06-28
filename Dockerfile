@@ -1,7 +1,7 @@
 FROM debian:stable-slim AS base
 RUN apt-get update && apt-get install -y --no-install-recommends \
   build-essential yasm nasm autoconf automake cmake git libtool \
-  pkg-config ca-certificates wget meson ninja-build
+  pkg-config ca-certificates wget meson ninja-build c2man
 
 ENV PREFIX="/ffmpeg_build"
 ENV PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig"
