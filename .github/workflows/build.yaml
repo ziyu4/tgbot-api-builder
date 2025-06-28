@@ -1,10 +1,7 @@
-name: TG Bot API Builder
+name: Ffmpeg Builder
   
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
     
 jobs:
   build:
@@ -17,18 +14,23 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build image
-        run: docker build -t tg-bot-api-builder .
+        run: docker build -t ffmpeg-builder .
 
       - name: Extract bundle
         run: |
-          id=$(docker create tg-bot-api-builder sh)
-          docker cp "$id:/telegram-bot-api.tar.gz" .
+          id=$(docker create ffmpeg-builder sh)
+          docker cp "$id:/ffmpeg" .
           docker rm -v "$id"
           
       - name: Generate SHA256 Checksum
         id: checksum
         run: |
-          echo "FILE_SHA256=$(sha256sum telegram-bot-api.tar.gz | awk '{print $1}')" >> $GITHUB_ENV
+          echo "FILE_SHA256=$(sha256sum ffmpeg | awk '{print $1}')" >> $GITHUB_ENV
+
+      - name: Compress ffmpeg
+        id: compress
+        run: |
+          tar -czf ffmpeg.tar.gz ffmpeg
 
       - name: Upload to Telegram
         env:
@@ -36,7 +38,7 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           set -euo pipefail
-          FILENAME='telegram-bot-api.tar.gz'
+          FILENAME='ffmpeg.tar.gz'
           CAPTION='`${{ env.FILE_SHA256 }}`'
 
           ls -lh "$FILENAME"
