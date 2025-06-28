@@ -1,65 +1,152 @@
-FROM alpine:3.20 AS builder
+FROM debian:stable-slim AS base
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  build-essential yasm nasm autoconf automake cmake git libtool \
+  pkg-config ca-certificates wget meson ninja-build
 
-RUN apk add --no-cache \
-  git cmake ninja make gperf build-base \
-  linux-headers binutils patchelf upx \
-  curl autoconf libtool automake sed perl
+ENV PREFIX="/ffmpeg_build"
+ENV PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig"
+ENV CFLAGS="-O3 -march=znver2 -mtune=znver2 -flto -ffunction-sections -fdata-sections -fomit-frame-pointer"
+ENV CXXFLAGS="$CFLAGS"
+ENV LDFLAGS="-static -flto -Wl,--gc-sections"
 
-WORKDIR /deps/jemalloc
-RUN curl -sSL https://github.com/jemalloc/jemalloc/releases/download/5.3.0/jemalloc-5.3.0.tar.bz2 -o jemalloc.tar.bz2 && \
-    tar --strip-components=1 -xjf jemalloc.tar.bz2 && \
-    ./configure --disable-shared --enable-static --with-pic && \
-    make -j$(nproc) && make install
+FROM base AS performance-core
 
-WORKDIR /deps/zlib
-RUN curl -sSL https://zlib.net/zlib-1.3.1.tar.gz -o zlib.tar.gz && \
-    tar --strip-components=1 -xzf zlib.tar.gz && \
-    ./configure --static && \
-    make -j$(nproc) && make install
+WORKDIR /build/x264
+RUN git clone --depth=1 https://code.videolan.org/videolan/x264.git .
+RUN ./configure --prefix=$PREFIX --enable-static --disable-opencl --disable-cli \
+  --extra-cflags="$CFLAGS" --extra-ldflags="$LDFLAGS"
+RUN make -j$(nproc) && make install
 
-WORKDIR /deps/openssl
-RUN curl -sSL https://www.openssl.org/source/openssl-1.1.1w.tar.gz -o openssl.tar.gz && \
-    tar --strip-components=1 -xzf openssl.tar.gz && \
-    ./Configure linux-x86_64 \
-      no-shared no-dso no-hw no-engine no-async no-tests no-pinshared \
-      -fPIC -static \
-      --prefix=/usr/local \
-      --openssldir=/etc/ssl && \
-    make -j$(nproc) && make install_sw
-
-ENV CFLAGS="-Os -flto -ffunction-sections -fdata-sections -fomit-frame-pointer -fno-stack-protector -march=znver2 -mtune=znver2 -DNDEBUG -DTD_HAVE_ATOMIC=1"
-ENV CXXFLAGS="$CFLAGS -fno-rtti -fno-exceptions -fvisibility-inlines-hidden -std=c++17"
-ENV LDFLAGS="-static -flto -Wl,--gc-sections -Wl,--strip-all -Wl,--as-needed -Wl,-z,norelro -Wl,-z,now -Wl,--build-id=none -L/usr/local/lib -lssl -lcrypto -ldl -lpthread -lz -ljemalloc"
-
-WORKDIR /src
-RUN git clone --recursive --depth=1 https://github.com/tdlight-team/tdlight-telegram-bot-api.git .
-
-RUN sed -i '1i#define TD_OPTIMIZE_MEMORY 1\n#define TD_REQUEST_TIMEOUT 30\n#define TD_MAX_PENDING_UPDATES 50\n' telegram-bot-api/Client.cpp
-RUN sed -i '4iadd_definitions(-DTD_OPTIMIZE_MEMORY=1 -DTD_MAX_PENDING_UPDATES=50 -DTD_REQUEST_TIMEOUT=30 -DTD_HAVE_ATOMIC=1 -DNDEBUG)\n' CMakeLists.txt
-
-WORKDIR /src/build
-RUN cmake .. \
-  -G Ninja \
-  -DCMAKE_BUILD_TYPE=Release \
+WORKDIR /build/x265
+RUN git clone https://bitbucket.org/multicoreware/x265_git .
+WORKDIR /build/x265/build/linux
+RUN cmake -G "Unix Makefiles" ../../source \
+  -DCMAKE_INSTALL_PREFIX=$PREFIX \
+  -DENABLE_SHARED=OFF -DENABLE_CLI=OFF \
   -DCMAKE_C_FLAGS="$CFLAGS" \
-  -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
-  -DCMAKE_EXE_LINKER_FLAGS="$LDFLAGS" \
-  -DCMAKE_FIND_LIBRARY_SUFFIXES=".a" \
-  -DZLIB_LIBRARY=/usr/local/lib/libz.a \
-  -DZLIB_INCLUDE_DIR=/usr/local/include \
-  -DOPENSSL_CRYPTO_LIBRARY=/usr/local/lib/libcrypto.a \
-  -DOPENSSL_SSL_LIBRARY=/usr/local/lib/libssl.a \
-  -DOPENSSL_INCLUDE_DIR=/usr/local/include \
-  -DOPENSSL_USE_STATIC_LIBS=TRUE \
-  -DJEMALLOC_LIBRARY=/usr/local/lib/libjemalloc.a \
-  -DJEMALLOC_INCLUDE_DIR=/usr/local/include \
-  -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON \
-  -DCMAKE_POLICY_DEFAULT_CMP0069=NEW \
-  -DBUILD_SHARED_LIBS=OFF
+  -DCMAKE_EXE_LINKER_FLAGS="$LDFLAGS"
+RUN make -j$(nproc) && make install
 
-RUN ninja -j$(nproc) telegram-bot-api
-RUN strip --strip-all telegram-bot-api
-RUN tar czf telegram-bot-api.tar.gz telegram-bot-api
+WORKDIR /build/libvpx
+RUN git clone --depth=1 https://chromium.googlesource.com/webm/libvpx .
+RUN ./configure --prefix=$PREFIX --disable-examples --disable-unit-tests --enable-vp9-highbitdepth \
+  --as=yasm --enable-vp8 --enable-vp9 --enable-static --disable-shared \
+  --extra-cflags="$CFLAGS"
+RUN make -j$(nproc) && make install
+
+WORKDIR /build/aom
+RUN git clone --depth=1 https://aomedia.googlesource.com/aom .
+WORKDIR /build/aom/build
+RUN cmake .. \
+  -DCMAKE_INSTALL_PREFIX=$PREFIX \
+  -DCONFIG_RUNTIME_CPU_DETECT=OFF \
+  -DAOM_TARGET_CPU=znver2 \
+  -DENABLE_SHARED=OFF \
+  -DCMAKE_C_FLAGS="$CFLAGS" \
+  -DCMAKE_EXE_LINKER_FLAGS="$LDFLAGS" \
+  -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+RUN make -j$(nproc) && make install
+
+WORKDIR /build/fdk-aac
+RUN git clone --depth=1 https://github.com/mstorsjo/fdk-aac.git .
+RUN autoreconf -fiv && ./configure --prefix=$PREFIX --disable-shared --enable-static \
+  CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS"
+RUN make -j$(nproc) && make install
+
+WORKDIR /build/lame
+RUN wget https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz
+RUN tar xzf lame-3.100.tar.gz --strip-components=1
+RUN ./configure --prefix=$PREFIX --disable-shared --enable-static \
+  CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS"
+RUN make -j$(nproc) && make install
+
+WORKDIR /build/libvorbis
+RUN git clone --depth=1 https://github.com/xiph/vorbis.git .
+RUN ./autogen.sh && ./configure --prefix=$PREFIX --disable-shared --enable-static \
+  CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS"
+RUN make -j$(nproc) && make install
+
+WORKDIR /build/opus
+RUN git clone --depth=1 https://github.com/xiph/opus.git .
+RUN ./autogen.sh && ./configure --prefix=$PREFIX --disable-shared --enable-static \
+  CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS"
+RUN make -j$(nproc) && make install
+
+WORKDIR /build/theora
+RUN git clone --depth=1 https://github.com/xiph/theora.git .
+RUN ./autogen.sh && ./configure --prefix=$PREFIX --disable-shared --enable-static \
+  CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS"
+RUN make -j$(nproc) && make install
+
+WORKDIR /build/xvidcore
+RUN wget https://downloads.xvid.com/downloads/xvidcore-1.3.7.tar.gz
+RUN tar xzf xvidcore-1.3.7.tar.gz && cd xvidcore/build/generic && \
+  ./configure --prefix=$PREFIX --disable-shared --enable-static \
+  CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" && make -j$(nproc) && make install
+
+FROM base AS support-core
+
+WORKDIR /build/libwebp
+RUN git clone --depth=1 https://github.com/webmproject/libwebp.git .
+RUN ./autogen.sh && ./configure --prefix=$PREFIX --disable-shared --enable-static \
+  CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" && make -j$(nproc) && make install
+
+WORKDIR /build/fribidi
+RUN git clone --depth=1 https://github.com/fribidi/fribidi.git .
+RUN ./autogen.sh && ./configure --prefix=$PREFIX --disable-shared --enable-static \
+  CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" && make -j$(nproc) && make install
+
+WORKDIR /build/freetype
+RUN git clone --depth=1 https://gitlab.freedesktop.org/freetype/freetype.git .
+RUN ./autogen.sh && ./configure --prefix=$PREFIX --disable-shared --enable-static \
+  CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" && make -j$(nproc) && make install
+
+WORKDIR /build/harfbuzz
+RUN git clone --depth=1 https://github.com/harfbuzz/harfbuzz.git .
+RUN meson setup build --prefix=$PREFIX --default-library=static --buildtype=release \
+  -Dc_args="$CFLAGS" -Dcpp_args="$CFLAGS"
+RUN meson compile -C build && meson install -C build
+
+WORKDIR /build/libass
+RUN git clone --depth=1 https://github.com/libass/libass.git .
+RUN ./autogen.sh && ./configure --prefix=$PREFIX --disable-shared --enable-static \
+  CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" \
+  --with-freetype-config=$PREFIX/bin/freetype-config
+RUN make -j$(nproc) && make install
+
+FROM base AS final-build
+COPY --from=performance-core $PREFIX $PREFIX
+COPY --from=support-core $PREFIX $PREFIX
+
+WORKDIR /build/ffmpeg
+RUN git clone --depth=1 https://github.com/FFmpeg/FFmpeg.git .
+RUN ./configure \
+  --prefix=$PREFIX \
+  --pkg-config-flags="--static" \
+  --extra-cflags="$CFLAGS" \
+  --extra-ldflags="$LDFLAGS" \
+  --enable-gpl \
+  --enable-version3 \
+  --enable-nonfree \
+  --enable-static \
+  --disable-shared \
+  --disable-debug \
+  --disable-doc \
+  --disable-ffplay \
+  --disable-ffprobe \
+  --enable-libx264 \
+  --enable-libx265 \
+  --enable-libvpx \
+  --enable-libaom \
+  --enable-libfdk-aac \
+  --enable-libmp3lame \
+  --enable-libvorbis \
+  --enable-libopus \
+  --enable-libtheora \
+  --enable-libxvid \
+  --enable-libwebp \
+  --enable-libass
+RUN make -j$(nproc) && make install && strip $PREFIX/bin/ffmpeg
 
 FROM scratch
-COPY --from=builder /src/build/telegram-bot-api.tar.gz /telegram-bot-api.tar.gz
+COPY --from=final-build /ffmpeg_build/bin/ffmpeg /ffmpeg⏎
