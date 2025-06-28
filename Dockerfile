@@ -27,7 +27,7 @@ RUN curl -sSL https://www.openssl.org/source/openssl-1.1.1w.tar.gz -o openssl.ta
       --openssldir=/etc/ssl && \
     make -j$(nproc) && make install_sw
 
-ENV CFLAGS="-Os -flto -ffunction-sections -fdata-sections -fomit-frame-pointer -fno-stack-protector -march=x86-64 -mtune=generic -DNDEBUG -DTD_HAVE_ATOMIC=1"
+ENV CFLAGS="-Os -flto -ffunction-sections -fdata-sections -fomit-frame-pointer -fno-stack-protector -march=znver2 -mtune=znver2 -DNDEBUG -DTD_HAVE_ATOMIC=1"
 ENV CXXFLAGS="$CFLAGS -fno-rtti -fno-exceptions -fvisibility-inlines-hidden -std=c++17"
 ENV LDFLAGS="-static -flto -Wl,--gc-sections -Wl,--strip-all -Wl,--as-needed -Wl,-z,norelro -Wl,-z,now -Wl,--build-id=none -L/usr/local/lib -lssl -lcrypto -ldl -lpthread -lz -ljemalloc"
 
