@@ -93,7 +93,7 @@ RUN ./autogen.sh && ./configure --prefix=$PREFIX --disable-shared --enable-stati
 
 WORKDIR /build/fribidi
 RUN git clone --depth=1 https://github.com/fribidi/fribidi.git .
-RUN ./autogen.sh && ./configure --prefix=$PREFIX --disable-shared --enable-static \
+RUN ./autogen.sh && ./configure --prefix=$PREFIX --disable-shared --enable-static --disable-docs \
   CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" && make -j$(nproc) && make install
 
 WORKDIR /build/freetype
