@@ -25,7 +25,7 @@ RUN wget https://downloads.xvid.com/downloads/xvidcore-1.3.7.tar.gz && \
     cd build/generic && \
     ./configure --prefix=$PREFIX --disable-shared --enable-static CFLAGS="$CFLAGS -fPIC" && \
     make -j$(nproc) libxvidcore.a && \
-    cp ../../build/generic/libxvidcore.a $PREFIX/lib/ && \
+    cp libxvidcore.a $PREFIX/lib/ && \
     mkdir -p $PREFIX/include/xvid && \
     cp -r ../../src/* $PREFIX/include/xvid/
 
