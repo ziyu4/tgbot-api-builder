@@ -1,7 +1,7 @@
 FROM alpine:3.20 AS base
 RUN apk add --no-cache --virtual .build-deps \
     build-base yasm nasm autoconf automake cmake git libtool \
-    pkgconfig ca-certificates wget meson ninja \
+    pkgconfig ca-certificates wget meson ninja curl \
     libogg-dev fontconfig-dev zlib-dev curl-dev
 
 ENV PREFIX="/ffmpeg_build"
@@ -9,6 +9,8 @@ ENV PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig"
 ENV CFLAGS="-O3 -march=znver2 -mtune=znver2 -flto -ffunction-sections -fdata-sections -fomit-frame-pointer"
 ENV CXXFLAGS="$CFLAGS"
 ENV LDFLAGS="-static -flto -Wl,--gc-sections"
+ENV OMP_NUM_THREADS=$(nproc)
+ENV MKL_NUM_THREADS=$(nproc)
 
 FROM base AS performance-core
 
@@ -18,21 +20,17 @@ RUN curl -sSL https://zlib.net/zlib-1.3.1.tar.gz -o zlib.tar.gz && \
       ./configure --prefix=$PREFIX --static && \
       CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" && make -j$(nproc) && make install
 
-WORKDIR /build/x264
-RUN git clone --depth=1 https://code.videolan.org/videolan/x264.git .
 RUN ./configure --prefix=$PREFIX --enable-static --disable-opencl --disable-cli \
-  --extra-cflags="$CFLAGS" --extra-ldflags="$LDFLAGS"
-RUN make -j$(nproc) && make install
+  --enable-pic --bit-depth=all \
+  --extra-cflags="$CFLAGS -DHAVE_MALLOC_H=1" --extra-ldflags="$LDFLAGS"
 
-WORKDIR /build/x265
-RUN git clone https://bitbucket.org/multicoreware/x265_git .
-WORKDIR /build/x265/build/linux
 RUN cmake -G "Unix Makefiles" ../../source \
   -DCMAKE_INSTALL_PREFIX=$PREFIX \
   -DENABLE_SHARED=OFF -DENABLE_CLI=OFF \
+  -DENABLE_ASSEMBLY=ON -DHIGH_BIT_DEPTH=ON \
+  -DMAIN12=ON -DENABLE_HDR10_PLUS=ON \
   -DCMAKE_C_FLAGS="$CFLAGS" \
   -DCMAKE_EXE_LINKER_FLAGS="$LDFLAGS"
-RUN make -j$(nproc) && make install
 
 WORKDIR /build/libvpx
 RUN git clone --depth=1 https://chromium.googlesource.com/webm/libvpx .
@@ -140,30 +138,21 @@ RUN git clone --depth=1 https://github.com/FFmpeg/FFmpeg.git .
 RUN ./configure \
   --prefix=$PREFIX \
   --pkg-config-flags="--static" \
-  --extra-cflags="$CFLAGS" \
+  --extra-cflags="$CFLAGS -mavx2 -mfma" \
   --extra-ldflags="$LDFLAGS" \
-  --enable-gpl \
-  --enable-version3 \
-  --enable-nonfree \
-  --enable-static \
-  --disable-shared \
-  --disable-debug \
-  --disable-doc \
-  --disable-ffplay \
-  --disable-ffprobe \
-  --enable-libx264 \
-  --enable-libx265 \
-  --enable-libvpx \
-  --enable-libaom \
-  --enable-libfdk-aac \
-  --enable-libmp3lame \
+  --enable-gpl --enable-version3 --enable-nonfree \
+  --enable-static --disable-shared \
+  --disable-debug --disable-doc \
+  --disable-ffplay --disable-ffprobe \
+  --enable-libx264 --enable-libx265 \
+  --enable-libvpx --enable-libaom \
+  --enable-libfdk-aac --enable-libmp3lame \
   --extra-libs="-lmp3lame" \
-  --enable-libvorbis \
-  --enable-libopus \
-  --enable-libtheora \
-  --enable-libxvid \
-  --enable-libwebp \
-  --enable-libass
+  --enable-libvorbis --enable-libopus \
+  --enable-libtheora --enable-libxvid \
+  --enable-libwebp --enable-libass \
+  --enable-avx2 --enable-fma3 \
+  --enable-inline-asm --enable-x86asm
 RUN make -j$(nproc) && make install && strip $PREFIX/bin/ffmpeg
 
 FROM scratch
