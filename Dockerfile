@@ -125,13 +125,14 @@ RUN git clone --depth=1 https://gitlab.freedesktop.org/freetype/freetype.git .
 RUN ./autogen.sh && ./configure --prefix=$PREFIX --disable-shared --enable-static \
   CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" && make -j$(nproc) && make install
 
+RUN sed -i 's|-lz|/ffmpeg_build/lib/libz.a|' $PREFIX/lib/pkgconfig/freetype2.pc
+ENV PKG_CONFIG_PATH=$PREFIX/lib/x86_64-linux-gnu/pkgconfig:$PREFIX/lib/pkgconfig
+
 WORKDIR /build/harfbuzz
 RUN git clone --depth=1 https://github.com/harfbuzz/harfbuzz.git .
 RUN meson setup build --prefix=$PREFIX --default-library=static --buildtype=release \
   -Dc_args="$CFLAGS" -Dcpp_args="$CFLAGS"
 RUN meson compile -C build && meson install -C build
-
-ENV PKG_CONFIG_PATH=$PREFIX/lib/x86_64-linux-gnu/pkgconfig:$PREFIX/lib/pkgconfig
 
 WORKDIR /build/libass
 RUN git clone --depth=1 https://github.com/libass/libass.git .
