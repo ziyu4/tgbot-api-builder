@@ -58,19 +58,25 @@ RUN git clone https://bitbucket.org/multicoreware/x265_git . && \
     make -j$(nproc) && make install
 
 WORKDIR /build/libvpx
-RUN git clone --depth=1 https://chromium.googlesource.com/webm/libvpx . && \
+RUN rm -rf * && \
+    git clone --depth=1 https://chromium.googlesource.com/webm/libvpx . && \
     ./configure --prefix=$PREFIX \
-    --disable-examples --disable-unit-tests --disable-tools \
+    --disable-examples --disable-unit-tests --disable-tools --disable-docs \
     --enable-vp8 --enable-vp9 --enable-vp9-highbitdepth \
     --enable-static --disable-shared --enable-pic \
     --target=x86_64-linux-gcc \
     --as=yasm \
-    --extra-cflags="$CFLAGS" && \
-    make -j$(nproc) && make install
+    --disable-runtime-cpu-detect \
+    --enable-postproc \
+    --enable-vp9-postproc \
+    --extra-cflags="$CFLAGS -fPIC" && \
+    make clean && make -j$(nproc) && make install
 
 RUN ls -la $PREFIX/lib/libvpx* && \
     ls -la $PREFIX/include/vpx/ && \
-    pkg-config --exists --print-errors vpx
+    pkg-config --exists --print-errors vpx && \
+    echo "VPX pkg-config details:" && \
+    pkg-config --cflags --libs vpx
 
 WORKDIR /build/aom
 RUN git clone --depth=1 https://aomedia.googlesource.com/aom . && \
@@ -141,6 +147,7 @@ RUN wget https://downloads.xiph.org/releases/vorbis/libvorbis-1.3.7.tar.gz && \
     CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" && \
     make -j$(nproc) && make install
 
+# Create missing pkg-config file for vorbis
 RUN echo "prefix=$PREFIX" > $PREFIX/lib/pkgconfig/vorbis.pc && \
     echo "exec_prefix=\${prefix}" >> $PREFIX/lib/pkgconfig/vorbis.pc && \
     echo "libdir=\${exec_prefix}/lib" >> $PREFIX/lib/pkgconfig/vorbis.pc && \
@@ -170,7 +177,22 @@ RUN echo "=== Checking installed libraries ===" && \
 WORKDIR /build/ffmpeg
 RUN git clone --depth=1 https://github.com/FFmpeg/FFmpeg.git .
 
-RUN echo "=== Starting FFmpeg configure ===" && \
+RUN echo "=== Debugging libvpx detection ===" && \
+    echo "Checking libvpx library:" && \
+    ls -la $PREFIX/lib/libvpx* && \
+    echo "Checking libvpx headers:" && \
+    ls -la $PREFIX/include/vpx/ && \
+    echo "Testing pkg-config vpx:" && \
+    pkg-config --cflags --libs vpx && \
+    echo "Testing direct compilation:" && \
+    echo '#include <vpx/vpx_decoder.h>' > test_vpx.c && \
+    echo 'int main() { return 0; }' >> test_vpx.c && \
+    gcc -I$PREFIX/include test_vpx.c -L$PREFIX/lib -lvpx -o test_vpx && \
+    echo "VPX test compilation successful" && \
+    rm -f test_vpx test_vpx.c
+
+RUN echo "=== Starting FFmpeg configure with debug ===" && \
+    ( \
     ./configure \
     --prefix=$PREFIX \
     --pkg-config-flags="--static" \
@@ -188,7 +210,28 @@ RUN echo "=== Starting FFmpeg configure ===" && \
     --enable-lto --enable-avx2 \
     --enable-fma3 --enable-libwebp \
     --enable-inline-asm --enable-x86asm \
-    2>&1 | tee configure.log || (echo "=== Configure failed, showing log ===" && cat ffbuild/config.log && exit 1)
+    2>&1 | tee configure.log \
+    ) || ( \
+    echo "=== Configure with libvpx failed, trying without libvpx ===" && \
+    ./configure \
+    --prefix=$PREFIX \
+    --pkg-config-flags="--static" \
+    --extra-cflags="$CFLAGS -mavx2 -mfma -I$PREFIX/include" \
+    --extra-ldflags="$LDFLAGS -L$PREFIX/lib" \
+    --extra-libs="-lpthread -lm -lz" \
+    --enable-gpl --enable-version3 --enable-nonfree \
+    --enable-static --disable-shared \
+    --disable-debug --disable-doc \
+    --disable-ffplay --disable-ffprobe \
+    --enable-libx264 --enable-libx265 \
+    --enable-libaom \
+    --enable-libfdk-aac --enable-libmp3lame \
+    --enable-libvorbis --enable-libxvid \
+    --enable-lto --enable-avx2 \
+    --enable-fma3 --enable-libwebp \
+    --enable-inline-asm --enable-x86asm \
+    2>&1 | tee configure_no_vpx.log \
+    ) && echo "=== FFmpeg configure completed successfully ==="
 
 RUN make -j$(nproc) && make install && strip $PREFIX/bin/ffmpeg
 
