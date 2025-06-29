@@ -21,13 +21,13 @@ RUN curl -sSL https://zlib.net/zlib-1.3.1.tar.gz -o zlib.tar.gz && \
 WORKDIR /build/xvidcore
 RUN wget https://downloads.xvid.com/downloads/xvidcore-1.3.7.tar.gz && \
     tar xzf xvidcore-1.3.7.tar.gz && \
-    cd xvidcore/build/generic && \
+    cd xvidcore && \
+    cd build/generic && \
     ./configure --prefix=$PREFIX --disable-shared --enable-static CFLAGS="$CFLAGS -fPIC" && \
-    make -j$(nproc) && \
-    install -d $PREFIX/lib $PREFIX/include/xvid && \
-    install -m644 libxvidcore.a $PREFIX/lib/ && \
-    cp -r ../../../src/* $PREFIX/include/xvid/
-RUN ls -lh $PREFIX/lib/libxvidcore.a && ls -lh $PREFIX/include/xvid/xvid.h
+    make -j$(nproc) libxvidcore.a && \
+    cp ../../build/generic/libxvidcore.a $PREFIX/lib/ && \
+    mkdir -p $PREFIX/include/xvid && \
+    cp -r ../../src/* $PREFIX/include/xvid/
 
 RUN echo "prefix=$PREFIX" > $PREFIX/lib/pkgconfig/xvid.pc && \
     echo "exec_prefix=\${prefix}" >> $PREFIX/lib/pkgconfig/xvid.pc && \
