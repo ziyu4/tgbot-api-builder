@@ -104,6 +104,13 @@ RUN ./autogen.sh && \
       LDFLAGS="$LDFLAGS -L$PREFIX/lib" && \
     make -j$(nproc) && make install
 
+WORKDIR /build/libvorbis
+RUN wget https://downloads.xiph.org/releases/vorbis/libvorbis-1.3.7.tar.gz && \
+    tar xzf libvorbis-1.3.7.tar.gz --strip-components=1 && \
+    ./configure --prefix=$PREFIX --disable-shared --enable-static \
+    CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" && \
+    make -j$(nproc) && make install
+
 WORKDIR /build/ffmpeg
 RUN git clone --depth=1 https://github.com/FFmpeg/FFmpeg.git .
 RUN ./configure \
