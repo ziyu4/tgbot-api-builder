@@ -7,9 +7,9 @@ RUN apk add --no-cache --virtual .build-deps \
 
 ENV PREFIX="/ffmpeg_build"
 ENV PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig"
-ENV CFLAGS="-O3 -march=znver2 -mtune=znver2 -flto -ffunction-sections -fdata-sections -fomit-frame-pointer"
+ENV CFLAGS="-O3 -march=znver2 -mtune=znver2 -ffunction-sections -fdata-sections -fomit-frame-pointer"
 ENV CXXFLAGS="$CFLAGS"
-ENV LDFLAGS="-static -flto -Wl,--gc-sections"
+ENV LDFLAGS="-static -Wl,--gc-sections"
 ENV OMP_NUM_THREADS=$(nproc)
 ENV MKL_NUM_THREADS=$(nproc)
 
