@@ -24,9 +24,11 @@ RUN wget https://downloads.xvid.com/downloads/xvidcore-1.3.7.tar.gz && \
     cd xvidcore/build/generic && \
     ./configure --prefix=$PREFIX --disable-shared --enable-static CFLAGS="$CFLAGS -fPIC -O3 -march=znver2 -mtune=znver2 -flto" && \
     make -j$(nproc) libxvidcore.a && \
-    cp ../libxvidcore.a $PREFIX/lib/ && \
+    LIBA=$(find . -name "libxvidcore.a" -print -quit) && \
+    echo "Found: $LIBA" && \
+    cp "$LIBA" $PREFIX/lib/ && \
     mkdir -p $PREFIX/include/xvid && \
-    cp -r ../../src/* $PREFIX/include/xvid/
+    cp -r ../../../src/* $PREFIX/include/xvid/
     
 RUN echo "prefix=$PREFIX" > $PREFIX/lib/pkgconfig/xvid.pc && \
     echo "exec_prefix=\${prefix}" >> $PREFIX/lib/pkgconfig/xvid.pc && \
