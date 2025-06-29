@@ -18,6 +18,28 @@ RUN curl -sSL https://zlib.net/zlib-1.3.1.tar.gz -o zlib.tar.gz && \
     tar --strip-components=1 -xzf zlib.tar.gz && \
     ./configure --prefix=$PREFIX --static && make -j$(nproc) && make install
 
+WORKDIR /build/xvidcore
+RUN wget https://downloads.xvid.com/downloads/xvidcore-1.3.7.tar.gz && \
+    tar xzf xvidcore-1.3.7.tar.gz && \
+    cd xvidcore/build/generic && \
+    ./configure --prefix=$PREFIX --disable-shared --enable-static CFLAGS="$CFLAGS -fPIC" && \
+    make -j$(nproc) libxvidcore.a && \
+    install -d $PREFIX/lib $PREFIX/include/xvid && \
+    install -m644 libxvidcore.a $PREFIX/lib/ && \
+    cp -r ../../src/* $PREFIX/include/xvid/
+RUN ls -lh $PREFIX/lib/libxvidcore.a && ls -lh $PREFIX/include/xvid/xvid.h
+
+RUN echo "prefix=$PREFIX" > $PREFIX/lib/pkgconfig/xvid.pc && \
+    echo "exec_prefix=\${prefix}" >> $PREFIX/lib/pkgconfig/xvid.pc && \
+    echo "libdir=\${exec_prefix}/lib" >> $PREFIX/lib/pkgconfig/xvid.pc && \
+    echo "includedir=\${prefix}/include" >> $PREFIX/lib/pkgconfig/xvid.pc && \
+    echo "" >> $PREFIX/lib/pkgconfig/xvid.pc && \
+    echo "Name: xvid" >> $PREFIX/lib/pkgconfig/xvid.pc && \
+    echo "Description: Xvid MPEG-4 video codec" >> $PREFIX/lib/pkgconfig/xvid.pc && \
+    echo "Version: 1.3.7" >> $PREFIX/lib/pkgconfig/xvid.pc && \
+    echo "Libs: -L\${libdir} -lxvidcore" >> $PREFIX/lib/pkgconfig/xvid.pc && \
+    echo "Cflags: -I\${includedir}/xvid" >> $PREFIX/lib/pkgconfig/xvid.pc
+
 WORKDIR /build/x264
 RUN git clone --depth=1 https://code.videolan.org/videolan/x264.git . && \
     apk add --no-cache bash perl && \
@@ -72,26 +94,15 @@ RUN wget https://downloads.xiph.org/releases/ogg/libogg-1.3.6.tar.gz && \
     CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" && \
     make -j$(nproc) && make install
 
-WORKDIR /build/xvidcore
-RUN wget https://downloads.xvid.com/downloads/xvidcore-1.3.7.tar.gz && \
-    tar xzf xvidcore-1.3.7.tar.gz && \
-    cd xvidcore/build/generic && \
-    ./configure --prefix=$PREFIX --disable-shared --enable-static CFLAGS="$CFLAGS -fPIC" && \
-    make -j$(nproc) libxvidcore.a && \
-    install -d $PREFIX/lib $PREFIX/include/xvid && \
-    install -m644 ../../build/generic/libxvidcore.a $PREFIX/lib/ && \
-    cp -r ../../src/* $PREFIX/include/xvid/
-
-RUN echo "prefix=$PREFIX" > $PREFIX/lib/pkgconfig/xvid.pc && \
-    echo "exec_prefix=\${prefix}" >> $PREFIX/lib/pkgconfig/xvid.pc && \
-    echo "libdir=\${exec_prefix}/lib" >> $PREFIX/lib/pkgconfig/xvid.pc && \
-    echo "includedir=\${prefix}/include" >> $PREFIX/lib/pkgconfig/xvid.pc && \
-    echo "" >> $PREFIX/lib/pkgconfig/xvid.pc && \
-    echo "Name: xvid" >> $PREFIX/lib/pkgconfig/xvid.pc && \
-    echo "Description: Xvid MPEG-4 video codec" >> $PREFIX/lib/pkgconfig/xvid.pc && \
-    echo "Version: 1.3.7" >> $PREFIX/lib/pkgconfig/xvid.pc && \
-    echo "Libs: -L\${libdir} -lxvidcore" >> $PREFIX/lib/pkgconfig/xvid.pc && \
-    echo "Cflags: -I\${includedir}/xvid" >> $PREFIX/lib/pkgconfig/xvid.pc
+WORKDIR /build/libwebp
+RUN git clone --depth=1 https://github.com/webmproject/libwebp.git .
+RUN ./autogen.sh && \
+    ./configure --prefix=$PREFIX \
+      --disable-shared \
+      --enable-static \
+      CFLAGS="$CFLAGS -I$PREFIX/include" \
+      LDFLAGS="$LDFLAGS -L$PREFIX/lib" && \
+    make -j$(nproc) && make install
 
 WORKDIR /build/ffmpeg
 RUN git clone --depth=1 https://github.com/FFmpeg/FFmpeg.git .
@@ -108,7 +119,8 @@ RUN ./configure \
     --enable-libvpx --enable-libaom \
     --enable-libfdk-aac --enable-libmp3lame \
     --enable-libvorbis --enable-libxvid \
-    --enable-lto --enable-avx2 --enable-fma3 \
+    --enable-lto --enable-avx2 \
+    --enable-fma3 --enable-libwebp \
     --enable-inline-asm --enable-x86asm
 RUN make -j$(nproc) && make install && strip $PREFIX/bin/ffmpeg
 
