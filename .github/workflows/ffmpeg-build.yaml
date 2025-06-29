@@ -2,6 +2,9 @@ name: Ffmpeg Builder
   
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - ffmpeg-builder
     
 jobs:
   build:
