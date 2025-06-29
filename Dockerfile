@@ -2,7 +2,7 @@ FROM alpine:3.20 AS base
 RUN apk add --no-cache --virtual .build-deps \
     build-base yasm nasm autoconf automake cmake git libtool \
     pkgconfig ca-certificates wget meson ninja curl \
-    libogg-dev fontconfig-dev zlib-dev curl-dev
+    fontconfig-dev zlib-dev curl-dev
 
 ENV PREFIX="/ffmpeg_build"
 ENV PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig"
@@ -22,9 +22,13 @@ RUN curl -sSL https://zlib.net/zlib-1.3.1.tar.gz -o zlib.tar.gz && \
 
 WORKDIR /build/x264
 RUN git clone --depth=1 https://code.videolan.org/videolan/x264.git .
-RUN ./configure --prefix=$PREFIX --enable-static --disable-opencl --disable-cli \
-  --enable-pic --bit-depth=all \
-  --extra-cflags="$CFLAGS -DHAVE_MALLOC_H=1" --extra-ldflags="$LDFLAGS"
+RUN apk add --no-cache bash perl && \
+    file configure && \
+    sed -i '1s|^.*$|#!/bin/bash|' configure && \
+    chmod +x configure && \
+    bash configure --prefix=$PREFIX --enable-static --disable-opencl --disable-cli \
+    --enable-pic --bit-depth=all \
+    --extra-cflags="$CFLAGS -DHAVE_MALLOC_H=1" --extra-ldflags="$LDFLAGS"
 RUN make -j$(nproc) && make install
 
 WORKDIR /build/x265
