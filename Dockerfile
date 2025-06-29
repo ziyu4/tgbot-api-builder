@@ -14,16 +14,22 @@ ENV MKL_NUM_THREADS=$(nproc)
 
 FROM base AS performance-core
 
-WORKDIR /deps/zlib
+WORKDIR /build/zlib
 RUN curl -sSL https://zlib.net/zlib-1.3.1.tar.gz -o zlib.tar.gz && \
       tar --strip-components=1 -xzf zlib.tar.gz && \
       ./configure --prefix=$PREFIX --static && \
       CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" && make -j$(nproc) && make install
 
+WORKDIR /build/x264Add commentMore actions
+RUN git clone --depth=1 https://code.videolan.org/videolan/x264.git .
 RUN ./configure --prefix=$PREFIX --enable-static --disable-opencl --disable-cli \
   --enable-pic --bit-depth=all \
   --extra-cflags="$CFLAGS -DHAVE_MALLOC_H=1" --extra-ldflags="$LDFLAGS"
+RUN make -j$(nproc) && make install
 
+WORKDIR /build/x265
+RUN git clone https://bitbucket.org/multicoreware/x265_git .
+WORKDIR /build/x265/build/linux
 RUN cmake -G "Unix Makefiles" ../../source \
   -DCMAKE_INSTALL_PREFIX=$PREFIX \
   -DENABLE_SHARED=OFF -DENABLE_CLI=OFF \
