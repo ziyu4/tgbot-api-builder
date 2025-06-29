@@ -1,7 +1,7 @@
 FROM debian:stable-slim AS base
 RUN apt-get update && apt-get install -y --no-install-recommends \
   build-essential yasm nasm autoconf automake cmake git libtool \
-  pkg-config ca-certificates wget meson ninja-build
+  pkg-config ca-certificates wget meson ninja-build libogg-dev libfontconfig1-dev
 
 ENV PREFIX="/ffmpeg_build"
 ENV PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig"
@@ -60,10 +60,17 @@ RUN ./configure --prefix=$PREFIX --disable-shared --enable-static \
   CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS"
 RUN make -j$(nproc) && make install
 
+WORKDIR /build/libogg
+RUN wget https://downloads.xiph.org/releases/ogg/libogg-1.3.6.tar.gz
+RUN tar xzf libogg-1.3.6.tar.gz --strip-components=1
+RUN ./configure --prefix=$PREFIX --disable-shared --enable-static \
+  CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS"
+RUN make -j$(nproc) && make install
+
 WORKDIR /build/libvorbis
 RUN git clone --depth=1 https://github.com/xiph/vorbis.git .
 RUN ./autogen.sh && ./configure --prefix=$PREFIX --disable-shared --enable-static \
-  CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS"
+  CFLAGS="$CFLAGS -Wno-error" LDFLAGS="$LDFLAGS"
 RUN make -j$(nproc) && make install
 
 WORKDIR /build/opus
@@ -74,15 +81,15 @@ RUN make -j$(nproc) && make install
 
 WORKDIR /build/theora
 RUN git clone --depth=1 https://github.com/xiph/theora.git .
-RUN ./autogen.sh && ./configure --prefix=$PREFIX --disable-shared --enable-static \
-  CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS"
+RUN ./configure --prefix=$PREFIX --disable-shared --enable-static --disable-examples \
+  CFLAGS="$CFLAGS -Wno-error" LDFLAGS="$LDFLAGS"
 RUN make -j$(nproc) && make install
 
 WORKDIR /build/xvidcore
 RUN wget https://downloads.xvid.com/downloads/xvidcore-1.3.7.tar.gz
 RUN tar xzf xvidcore-1.3.7.tar.gz && cd xvidcore/build/generic && \
-  ./configure --prefix=$PREFIX --disable-shared --enable-static \
-  CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" && make -j$(nproc) && make install
+  ./configure --prefix=$PREFIX --disable-shared --enable-static CFLAGS="$CFLAGS"
+RUN make -j$(nproc) libxvidcore.a && install -d $PREFIX/lib $PREFIX/include/xvid && install -m644 ./=build/libxvidcore.a $PREFIX/lib/ && cp -r ../../src/* $PREFIX/include/xvid/
 
 FROM base AS support-core
 
@@ -107,6 +114,8 @@ RUN git clone --depth=1 https://github.com/harfbuzz/harfbuzz.git .
 RUN meson setup build --prefix=$PREFIX --default-library=static --buildtype=release \
   -Dc_args="$CFLAGS" -Dcpp_args="$CFLAGS"
 RUN meson compile -C build && meson install -C build
+
+ENV PKG_CONFIG_PATH=$PREFIX/lib/x86_64-linux-gnu/pkgconfig:$PREFIX/lib/pkgconfig
 
 WORKDIR /build/libass
 RUN git clone --depth=1 https://github.com/libass/libass.git .
