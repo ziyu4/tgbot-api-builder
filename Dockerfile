@@ -64,6 +64,17 @@ RUN git clone --depth=1 https://chromium.googlesource.com/webm/libvpx . && \
     --extra-cflags="$CFLAGS" && \
     make -j$(nproc) && make install
 
+RUN echo "prefix=$PREFIX" > $PREFIX/lib/pkgconfig/vpx.pc && \
+    echo "exec_prefix=\${prefix}" >> $PREFIX/lib/pkgconfig/vpx.pc && \
+    echo "libdir=\${exec_prefix}/lib" >> $PREFIX/lib/pkgconfig/vpx.pc && \
+    echo "includedir=\${prefix}/include" >> $PREFIX/lib/pkgconfig/vpx.pc && \
+    echo "" >> $PREFIX/lib/pkgconfig/vpx.pc && \
+    echo "Name: vpx" >> $PREFIX/lib/pkgconfig/vpx.pc && \
+    echo "Description: VP8/VP9 video codec" >> $PREFIX/lib/pkgconfig/vpx.pc && \
+    echo "Version: 1.15.2" >> $PREFIX/lib/pkgconfig/vpx.pc && \
+    echo "Libs: -L\${libdir} -lvpx" >> $PREFIX/lib/pkgconfig/vpx.pc && \
+    echo "Cflags: -I\${includedir}" >> $PREFIX/lib/pkgconfig/vpx.pc
+
 WORKDIR /build/aom
 RUN git clone --depth=1 https://aomedia.googlesource.com/aom . && \
     cd build && \
