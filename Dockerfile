@@ -59,21 +59,18 @@ RUN git clone https://bitbucket.org/multicoreware/x265_git . && \
 
 WORKDIR /build/libvpx
 RUN git clone --depth=1 https://chromium.googlesource.com/webm/libvpx . && \
-    ./configure --prefix=$PREFIX --disable-examples --disable-unit-tests --enable-vp9-highbitdepth \
-    --as=yasm --enable-vp8 --enable-vp9 --enable-static --disable-shared --enable-pic \
+    ./configure --prefix=$PREFIX \
+    --disable-examples --disable-unit-tests --disable-tools \
+    --enable-vp8 --enable-vp9 --enable-vp9-highbitdepth \
+    --enable-static --disable-shared --enable-pic \
+    --target=x86_64-linux-gcc \
+    --as=yasm \
     --extra-cflags="$CFLAGS" && \
     make -j$(nproc) && make install
 
-RUN echo "prefix=$PREFIX" > $PREFIX/lib/pkgconfig/vpx.pc && \
-    echo "exec_prefix=\${prefix}" >> $PREFIX/lib/pkgconfig/vpx.pc && \
-    echo "libdir=\${exec_prefix}/lib" >> $PREFIX/lib/pkgconfig/vpx.pc && \
-    echo "includedir=\${prefix}/include" >> $PREFIX/lib/pkgconfig/vpx.pc && \
-    echo "" >> $PREFIX/lib/pkgconfig/vpx.pc && \
-    echo "Name: vpx" >> $PREFIX/lib/pkgconfig/vpx.pc && \
-    echo "Description: VP8/VP9 video codec" >> $PREFIX/lib/pkgconfig/vpx.pc && \
-    echo "Version: 1.15.2" >> $PREFIX/lib/pkgconfig/vpx.pc && \
-    echo "Libs: -L\${libdir} -lvpx" >> $PREFIX/lib/pkgconfig/vpx.pc && \
-    echo "Cflags: -I\${includedir}" >> $PREFIX/lib/pkgconfig/vpx.pc
+RUN ls -la $PREFIX/lib/libvpx* && \
+    ls -la $PREFIX/include/vpx/ && \
+    pkg-config --exists --print-errors vpx
 
 WORKDIR /build/aom
 RUN git clone --depth=1 https://aomedia.googlesource.com/aom . && \
@@ -122,13 +119,22 @@ RUN wget https://downloads.xiph.org/releases/vorbis/libvorbis-1.3.7.tar.gz && \
     CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" && \
     make -j$(nproc) && make install
 
+RUN echo "=== Checking installed libraries ===" && \
+    ls -la $PREFIX/lib/lib* && \
+    echo "=== PKG-CONFIG files ===" && \
+    ls -la $PREFIX/lib/pkgconfig/ && \
+    echo "=== Testing pkg-config for key libraries ===" && \
+    pkg-config --exists --print-errors x264 x265 vpx aom fdk-aac mp3lame vorbis
+
 WORKDIR /build/ffmpeg
 RUN git clone --depth=1 https://github.com/FFmpeg/FFmpeg.git .
+
 RUN ./configure \
     --prefix=$PREFIX \
     --pkg-config-flags="--static" \
-    --extra-cflags="$CFLAGS -mavx2 -mfma" \
+    --extra-cflags="$CFLAGS -mavx2 -mfma -I$PREFIX/include" \
     --extra-ldflags="$LDFLAGS -L$PREFIX/lib" \
+    --extra-libs="-lpthread -lm -lz" \
     --enable-gpl --enable-version3 --enable-nonfree \
     --enable-static --disable-shared \
     --disable-debug --disable-doc \
@@ -140,6 +146,7 @@ RUN ./configure \
     --enable-lto --enable-avx2 \
     --enable-fma3 --enable-libwebp \
     --enable-inline-asm --enable-x86asm
+    
 RUN make -j$(nproc) && make install && strip $PREFIX/bin/ffmpeg
 
 FROM scratch
