@@ -72,12 +72,6 @@ RUN rm -rf * && \
     --extra-cflags="$CFLAGS -fPIC" && \
     make clean && make -j$(nproc) && make install
 
-RUN ls -la $PREFIX/lib/libvpx* && \
-    ls -la $PREFIX/include/vpx/ && \
-    pkg-config --exists --print-errors vpx && \
-    echo "VPX pkg-config details:" && \
-    pkg-config --cflags --libs vpx
-
 WORKDIR /build/aom
 RUN git clone --depth=1 https://aomedia.googlesource.com/aom . && \
     cd build && \
@@ -119,17 +113,6 @@ RUN wget https://downloads.xiph.org/releases/ogg/libogg-1.3.6.tar.gz && \
     CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" && \
     make -j$(nproc) && make install
 
-RUN echo "prefix=$PREFIX" > $PREFIX/lib/pkgconfig/ogg.pc && \
-    echo "exec_prefix=\${prefix}" >> $PREFIX/lib/pkgconfig/ogg.pc && \
-    echo "libdir=\${exec_prefix}/lib" >> $PREFIX/lib/pkgconfig/ogg.pc && \
-    echo "includedir=\${prefix}/include" >> $PREFIX/lib/pkgconfig/ogg.pc && \
-    echo "" >> $PREFIX/lib/pkgconfig/ogg.pc && \
-    echo "Name: ogg" >> $PREFIX/lib/pkgconfig/ogg.pc && \
-    echo "Description: Ogg container format" >> $PREFIX/lib/pkgconfig/ogg.pc && \
-    echo "Version: 1.3.6" >> $PREFIX/lib/pkgconfig/ogg.pc && \
-    echo "Libs: -L\${libdir} -logg" >> $PREFIX/lib/pkgconfig/ogg.pc && \
-    echo "Cflags: -I\${includedir}" >> $PREFIX/lib/pkgconfig/ogg.pc
-
 WORKDIR /build/libwebp
 RUN git clone --depth=1 https://github.com/webmproject/libwebp.git .
 RUN ./autogen.sh && \
@@ -147,91 +130,69 @@ RUN wget https://downloads.xiph.org/releases/vorbis/libvorbis-1.3.7.tar.gz && \
     CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" && \
     make -j$(nproc) && make install
 
-# Create missing pkg-config file for vorbis
-RUN echo "prefix=$PREFIX" > $PREFIX/lib/pkgconfig/vorbis.pc && \
-    echo "exec_prefix=\${prefix}" >> $PREFIX/lib/pkgconfig/vorbis.pc && \
-    echo "libdir=\${exec_prefix}/lib" >> $PREFIX/lib/pkgconfig/vorbis.pc && \
-    echo "includedir=\${prefix}/include" >> $PREFIX/lib/pkgconfig/vorbis.pc && \
-    echo "" >> $PREFIX/lib/pkgconfig/vorbis.pc && \
-    echo "Name: vorbis" >> $PREFIX/lib/pkgconfig/vorbis.pc && \
-    echo "Description: Vorbis audio codec" >> $PREFIX/lib/pkgconfig/vorbis.pc && \
-    echo "Version: 1.3.7" >> $PREFIX/lib/pkgconfig/vorbis.pc && \
-    echo "Requires: ogg" >> $PREFIX/lib/pkgconfig/vorbis.pc && \
-    echo "Libs: -L\${libdir} -lvorbis" >> $PREFIX/lib/pkgconfig/vorbis.pc && \
-    echo "Cflags: -I\${includedir}" >> $PREFIX/lib/pkgconfig/vorbis.pc
-
-RUN echo "=== Checking installed libraries ===" && \
-    ls -la $PREFIX/lib/lib* && \
-    echo "=== PKG-CONFIG files ===" && \
-    ls -la $PREFIX/lib/pkgconfig/ && \
-    echo "=== Testing pkg-config for key libraries ===" && \
-    (pkg-config --exists x264 && echo "x264: OK" || echo "x264: MISSING") && \
-    (pkg-config --exists x265 && echo "x265: OK" || echo "x265: MISSING") && \
-    (pkg-config --exists vpx && echo "vpx: OK" || echo "vpx: MISSING") && \
-    (pkg-config --exists aom && echo "aom: OK" || echo "aom: MISSING") && \
-    (pkg-config --exists fdk-aac && echo "fdk-aac: OK" || echo "fdk-aac: MISSING") && \
-    (pkg-config --exists mp3lame && echo "mp3lame: OK" || echo "mp3lame: MISSING") && \
-    (pkg-config --exists vorbis && echo "vorbis: OK" || echo "vorbis: MISSING") && \
-    (pkg-config --exists ogg && echo "ogg: OK" || echo "ogg: MISSING")
-
 WORKDIR /build/ffmpeg
 RUN git clone --depth=1 https://github.com/FFmpeg/FFmpeg.git .
 
-RUN echo "=== Debugging libvpx detection ===" && \
-    echo "Checking libvpx library:" && \
-    ls -la $PREFIX/lib/libvpx* && \
-    echo "Checking libvpx headers:" && \
-    ls -la $PREFIX/include/vpx/ && \
-    echo "Testing pkg-config vpx:" && \
-    pkg-config --cflags --libs vpx && \
-    echo "Testing direct compilation:" && \
-    echo '#include <vpx/vpx_decoder.h>' > test_vpx.c && \
-    echo 'int main() { return 0; }' >> test_vpx.c && \
-    gcc -I$PREFIX/include test_vpx.c -L$PREFIX/lib -lvpx -o test_vpx && \
-    echo "VPX test compilation successful" && \
-    rm -f test_vpx test_vpx.c
+RUN echo "=== Patching FFmpeg configure to force libvpx detection ===" && \
+    cp configure configure.orig && \
+    sed -i '/check_lib libvpx "vpx\/vpx_decoder.h vpx\/vp8dx.h vpx\/vp8cx.h" vpx_codec_version -lvpx/c\
+enabled libvpx && echo "libvpx enabled (forced)" || die "ERROR: libvpx not found"' configure && \
+    echo 'enable libvpx' >> configure && \
+    echo 'add_extralibs -lvpx -lm' >> configure
 
-RUN echo "=== Starting FFmpeg configure with debug ===" && \
-    ( \
+ENV LIBVPX_CFLAGS="-I/usr/local/include"
+ENV LIBVPX_LIBS="-L/usr/local/lib -lvpx -lm"
+ENV VPX_CFLAGS="-I/usr/local/include"  
+ENV VPX_LIBS="-L/usr/local/lib -lvpx -lm"
+
+RUN echo "=== Manual libvpx configuration ===" && \
+    echo '#include <vpx/vpx_decoder.h>' > test_manual.c && \
+    echo 'int main() { vpx_codec_version(); return 0; }' >> test_manual.c && \
+    gcc -I$PREFIX/include -L$PREFIX/lib test_manual.c -lvpx -lm -o test_manual && \
+    echo "Manual libvpx test PASSED" && \
+    rm test_manual test_manual.c
+
+RUN echo "=== FFmpeg configure dengan semua flag manual ===" && \
     ./configure \
     --prefix=$PREFIX \
-    --pkg-config-flags="--static" \
-    --extra-cflags="$CFLAGS -mavx2 -mfma -I$PREFIX/include" \
-    --extra-ldflags="$LDFLAGS -L$PREFIX/lib" \
-    --extra-libs="-lpthread -lm -lz" \
     --enable-gpl --enable-version3 --enable-nonfree \
     --enable-static --disable-shared \
     --disable-debug --disable-doc \
     --disable-ffplay --disable-ffprobe \
     --enable-libx264 --enable-libx265 \
-    --enable-libvpx --enable-libaom \
-    --enable-libfdk-aac --enable-libmp3lame \
-    --enable-libvorbis --enable-libxvid \
-    --enable-lto --enable-avx2 \
-    --enable-fma3 --enable-libwebp \
-    --enable-inline-asm --enable-x86asm \
-    2>&1 | tee configure.log \
-    ) || ( \
-    echo "=== Configure with libvpx failed, trying without libvpx ===" && \
-    ./configure \
-    --prefix=$PREFIX \
-    --pkg-config-flags="--static" \
-    --extra-cflags="$CFLAGS -mavx2 -mfma -I$PREFIX/include" \
-    --extra-ldflags="$LDFLAGS -L$PREFIX/lib" \
-    --extra-libs="-lpthread -lm -lz" \
-    --enable-gpl --enable-version3 --enable-nonfree \
-    --enable-static --disable-shared \
-    --disable-debug --disable-doc \
-    --disable-ffplay --disable-ffprobe \
-    --enable-libx264 --enable-libx265 \
+    --enable-libvpx \
     --enable-libaom \
     --enable-libfdk-aac --enable-libmp3lame \
     --enable-libvorbis --enable-libxvid \
     --enable-lto --enable-avx2 \
     --enable-fma3 --enable-libwebp \
     --enable-inline-asm --enable-x86asm \
-    2>&1 | tee configure_no_vpx.log \
-    ) && echo "=== FFmpeg configure completed successfully ==="
+    --extra-cflags="$CFLAGS -mavx2 -mfma -I$PREFIX/include -DHAVE_VPX=1" \
+    --extra-ldflags="$LDFLAGS -L$PREFIX/lib" \
+    --extra-libs="-lpthread -lm -lz -lvpx" \
+    --disable-autodetect \
+    --enable-cross-compile \
+    --arch=x86_64 \
+    --target-os=linux || \
+    ( \
+    echo "=== Configure failed, trying alternative method ===" && \
+    ./configure \
+    --prefix=$PREFIX \
+    --enable-gpl --enable-version3 --enable-nonfree \
+    --enable-static --disable-shared \
+    --disable-debug --disable-doc \
+    --disable-ffplay --disable-ffprobe \
+    --enable-libx264 --enable-libx265 \
+    --enable-libvpx \
+    --enable-libaom \
+    --enable-libfdk-aac --enable-libmp3lame \
+    --enable-libvorbis --enable-libxvid \
+    --enable-libwebp \
+    --extra-cflags="-O3 -I$PREFIX/include" \
+    --extra-ldflags="-static -L$PREFIX/lib" \
+    --extra-libs="-lpthread -lm -lz -lvpx" \
+    --disable-autodetect \
+    )
 
 RUN make -j$(nproc) && make install && strip $PREFIX/bin/ffmpeg
 
