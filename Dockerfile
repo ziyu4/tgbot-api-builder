@@ -1,7 +1,8 @@
-FROM debian:stable-slim AS base
-RUN apt-get update && apt-get install -y --no-install-recommends \
-  build-essential yasm nasm autoconf automake cmake git libtool \
-  pkg-config ca-certificates wget meson ninja-build libogg-dev libfontconfig1-dev zlib1g-dev
+FROM alpine:3.20 AS base
+RUN apk add --no-cache --virtual .build-deps \
+    build-base yasm nasm autoconf automake cmake git libtool \
+    pkgconfig ca-certificates wget meson ninja \
+    libogg-dev fontconfig-dev zlib-dev curl-dev
 
 ENV PREFIX="/ffmpeg_build"
 ENV PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig"
@@ -10,6 +11,12 @@ ENV CXXFLAGS="$CFLAGS"
 ENV LDFLAGS="-static -flto -Wl,--gc-sections"
 
 FROM base AS performance-core
+
+WORKDIR /deps/zlib
+RUN curl -sSL https://zlib.net/zlib-1.3.1.tar.gz -o zlib.tar.gz && \
+      tar --strip-components=1 -xzf zlib.tar.gz && \
+      ./configure --prefix=$PREFIX --static && \
+      CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" && make -j$(nproc) && make install
 
 WORKDIR /build/x264
 RUN git clone --depth=1 https://code.videolan.org/videolan/x264.git .
@@ -150,6 +157,7 @@ RUN ./configure \
   --enable-libaom \
   --enable-libfdk-aac \
   --enable-libmp3lame \
+  --extra-libs="-lmp3lame" \
   --enable-libvorbis \
   --enable-libopus \
   --enable-libtheora \
