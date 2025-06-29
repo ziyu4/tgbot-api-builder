@@ -56,7 +56,7 @@ RUN make -j$(nproc) && make install
 WORKDIR /build/lame
 RUN wget https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz
 RUN tar xzf lame-3.100.tar.gz --strip-components=1
-RUN ./configure --prefix=$PREFIX --disable-shared --enable-static \
+RUN ./configure --prefix=$PREFIX --disable-shared --enable-static --enable-nasm \
   CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS"
 RUN make -j$(nproc) && make install
 
