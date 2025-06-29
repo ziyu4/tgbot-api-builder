@@ -1,7 +1,7 @@
 FROM debian:stable-slim AS base
 RUN apt-get update && apt-get install -y --no-install-recommends \
   build-essential yasm nasm autoconf automake cmake git libtool \
-  pkg-config ca-certificates wget meson ninja-build libogg-dev libfontconfig1-dev
+  pkg-config ca-certificates wget meson ninja-build libogg-dev libfontconfig1-dev zlib1g-dev
 
 ENV PREFIX="/ffmpeg_build"
 ENV PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig"
@@ -159,4 +159,4 @@ RUN ./configure \
 RUN make -j$(nproc) && make install && strip $PREFIX/bin/ffmpeg
 
 FROM scratch
-COPY --from=final-build /ffmpeg_build/bin/ffmpeg /ffmpeg⏎
+COPY --from=final-build /ffmpeg_build/bin/ffmpeg /ffmpeg
