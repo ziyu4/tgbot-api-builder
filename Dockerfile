@@ -44,7 +44,7 @@ RUN git clone --depth=1 https://chromium.googlesource.com/webm/libvpx . && \
 
 WORKDIR /build/aom
 RUN git clone --depth=1 https://aomedia.googlesource.com/aom . && \
-    mkdir build && cd build && \
+    cd build && \
     cmake .. -DCMAKE_INSTALL_PREFIX=$PREFIX -DCMAKE_BUILD_TYPE=Release \
     -DCONFIG_RUNTIME_CPU_DETECT=OFF -DAOM_TARGET_CPU=znver2 -DENABLE_SHARED=OFF \
     -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_EXE_LINKER_FLAGS="$LDFLAGS" \
