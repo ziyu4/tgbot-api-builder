@@ -20,7 +20,7 @@ RUN curl -sSL https://zlib.net/zlib-1.3.1.tar.gz -o zlib.tar.gz && \
       ./configure --prefix=$PREFIX --static && \
       CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" && make -j$(nproc) && make install
 
-WORKDIR /build/x264Add commentMore actions
+WORKDIR /build/x264
 RUN git clone --depth=1 https://code.videolan.org/videolan/x264.git .
 RUN ./configure --prefix=$PREFIX --enable-static --disable-opencl --disable-cli \
   --enable-pic --bit-depth=all \
@@ -37,6 +37,7 @@ RUN cmake -G "Unix Makefiles" ../../source \
   -DMAIN12=ON -DENABLE_HDR10_PLUS=ON \
   -DCMAKE_C_FLAGS="$CFLAGS" \
   -DCMAKE_EXE_LINKER_FLAGS="$LDFLAGS"
+RUN make -j$(nproc) && make install
 
 WORKDIR /build/libvpx
 RUN git clone --depth=1 https://chromium.googlesource.com/webm/libvpx .
