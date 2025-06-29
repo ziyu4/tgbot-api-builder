@@ -1,4 +1,6 @@
-FROM alpine:3.20 AS base RUN apk add --no-cache --virtual .build-deps 
+FROM alpine:3.20 AS base
+
+RUN apk add --no-cache --virtual .build-deps 
 build-base yasm nasm autoconf automake cmake git libtool 
 pkgconfig ca-certificates wget meson ninja curl 
 libogg-dev fontconfig-dev zlib-dev curl-dev musl-dev 
