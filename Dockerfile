@@ -130,8 +130,13 @@ ENV PKG_CONFIG_PATH=$PREFIX/lib/x86_64-linux-gnu/pkgconfig:$PREFIX/lib/pkgconfig
 
 WORKDIR /build/harfbuzz
 RUN git clone --depth=1 https://github.com/harfbuzz/harfbuzz.git .
-RUN meson setup build --prefix=$PREFIX --default-library=static --buildtype=release \
-  -Dc_args="$CFLAGS" -Dcpp_args="$CFLAGS"
+RUN meson setup build \
+  --prefix=$PREFIX \
+  --default-library=static \
+  --prefer-static \
+  --buildtype=release \
+  -Dc_args="$CFLAGS" \
+  -Dcpp_args="$CFLAGS"
 RUN meson compile -C build && meson install -C build
 
 WORKDIR /build/libass
