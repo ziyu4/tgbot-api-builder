@@ -1,7 +1,7 @@
 FROM alpine:3.20 AS base
 RUN apk add --no-cache --virtual .build-deps \
     build-base yasm nasm autoconf automake cmake git libtool \
-    pkgconfig ca-certificates wget meson ninja curl \
+    pkgconfig pkgconf ca-certificates wget meson ninja curl \
     libogg-dev fontconfig-dev zlib-dev curl-dev musl-dev \
     diffutils gperf gettext gettext-dev
 
@@ -95,12 +95,34 @@ RUN wget https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.ta
     CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" && \
     make -j$(nproc) && make install
 
+RUN echo "prefix=$PREFIX" > $PREFIX/lib/pkgconfig/mp3lame.pc && \
+    echo "exec_prefix=\${prefix}" >> $PREFIX/lib/pkgconfig/mp3lame.pc && \
+    echo "libdir=\${exec_prefix}/lib" >> $PREFIX/lib/pkgconfig/mp3lame.pc && \
+    echo "includedir=\${prefix}/include" >> $PREFIX/lib/pkgconfig/mp3lame.pc && \
+    echo "" >> $PREFIX/lib/pkgconfig/mp3lame.pc && \
+    echo "Name: lame" >> $PREFIX/lib/pkgconfig/mp3lame.pc && \
+    echo "Description: LAME MP3 encoder" >> $PREFIX/lib/pkgconfig/mp3lame.pc && \
+    echo "Version: 3.100" >> $PREFIX/lib/pkgconfig/mp3lame.pc && \
+    echo "Libs: -L\${libdir} -lmp3lame" >> $PREFIX/lib/pkgconfig/mp3lame.pc && \
+    echo "Cflags: -I\${includedir}/lame" >> $PREFIX/lib/pkgconfig/mp3lame.pc
+
 WORKDIR /build/libogg
 RUN wget https://downloads.xiph.org/releases/ogg/libogg-1.3.6.tar.gz && \
     tar xzf libogg-1.3.6.tar.gz --strip-components=1 && \
     ./configure --prefix=$PREFIX --disable-shared --enable-static \
     CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" && \
     make -j$(nproc) && make install
+
+RUN echo "prefix=$PREFIX" > $PREFIX/lib/pkgconfig/ogg.pc && \
+    echo "exec_prefix=\${prefix}" >> $PREFIX/lib/pkgconfig/ogg.pc && \
+    echo "libdir=\${exec_prefix}/lib" >> $PREFIX/lib/pkgconfig/ogg.pc && \
+    echo "includedir=\${prefix}/include" >> $PREFIX/lib/pkgconfig/ogg.pc && \
+    echo "" >> $PREFIX/lib/pkgconfig/ogg.pc && \
+    echo "Name: ogg" >> $PREFIX/lib/pkgconfig/ogg.pc && \
+    echo "Description: Ogg container format" >> $PREFIX/lib/pkgconfig/ogg.pc && \
+    echo "Version: 1.3.6" >> $PREFIX/lib/pkgconfig/ogg.pc && \
+    echo "Libs: -L\${libdir} -logg" >> $PREFIX/lib/pkgconfig/ogg.pc && \
+    echo "Cflags: -I\${includedir}" >> $PREFIX/lib/pkgconfig/ogg.pc
 
 WORKDIR /build/libwebp
 RUN git clone --depth=1 https://github.com/webmproject/libwebp.git .
@@ -119,17 +141,37 @@ RUN wget https://downloads.xiph.org/releases/vorbis/libvorbis-1.3.7.tar.gz && \
     CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" && \
     make -j$(nproc) && make install
 
+RUN echo "prefix=$PREFIX" > $PREFIX/lib/pkgconfig/vorbis.pc && \
+    echo "exec_prefix=\${prefix}" >> $PREFIX/lib/pkgconfig/vorbis.pc && \
+    echo "libdir=\${exec_prefix}/lib" >> $PREFIX/lib/pkgconfig/vorbis.pc && \
+    echo "includedir=\${prefix}/include" >> $PREFIX/lib/pkgconfig/vorbis.pc && \
+    echo "" >> $PREFIX/lib/pkgconfig/vorbis.pc && \
+    echo "Name: vorbis" >> $PREFIX/lib/pkgconfig/vorbis.pc && \
+    echo "Description: Vorbis audio codec" >> $PREFIX/lib/pkgconfig/vorbis.pc && \
+    echo "Version: 1.3.7" >> $PREFIX/lib/pkgconfig/vorbis.pc && \
+    echo "Requires: ogg" >> $PREFIX/lib/pkgconfig/vorbis.pc && \
+    echo "Libs: -L\${libdir} -lvorbis" >> $PREFIX/lib/pkgconfig/vorbis.pc && \
+    echo "Cflags: -I\${includedir}" >> $PREFIX/lib/pkgconfig/vorbis.pc
+
 RUN echo "=== Checking installed libraries ===" && \
     ls -la $PREFIX/lib/lib* && \
     echo "=== PKG-CONFIG files ===" && \
     ls -la $PREFIX/lib/pkgconfig/ && \
     echo "=== Testing pkg-config for key libraries ===" && \
-    pkg-config --exists --print-errors x264 x265 vpx aom fdk-aac mp3lame vorbis
+    (pkg-config --exists x264 && echo "x264: OK" || echo "x264: MISSING") && \
+    (pkg-config --exists x265 && echo "x265: OK" || echo "x265: MISSING") && \
+    (pkg-config --exists vpx && echo "vpx: OK" || echo "vpx: MISSING") && \
+    (pkg-config --exists aom && echo "aom: OK" || echo "aom: MISSING") && \
+    (pkg-config --exists fdk-aac && echo "fdk-aac: OK" || echo "fdk-aac: MISSING") && \
+    (pkg-config --exists mp3lame && echo "mp3lame: OK" || echo "mp3lame: MISSING") && \
+    (pkg-config --exists vorbis && echo "vorbis: OK" || echo "vorbis: MISSING") && \
+    (pkg-config --exists ogg && echo "ogg: OK" || echo "ogg: MISSING")
 
 WORKDIR /build/ffmpeg
 RUN git clone --depth=1 https://github.com/FFmpeg/FFmpeg.git .
 
-RUN ./configure \
+RUN echo "=== Starting FFmpeg configure ===" && \
+    ./configure \
     --prefix=$PREFIX \
     --pkg-config-flags="--static" \
     --extra-cflags="$CFLAGS -mavx2 -mfma -I$PREFIX/include" \
@@ -145,8 +187,9 @@ RUN ./configure \
     --enable-libvorbis --enable-libxvid \
     --enable-lto --enable-avx2 \
     --enable-fma3 --enable-libwebp \
-    --enable-inline-asm --enable-x86asm
-    
+    --enable-inline-asm --enable-x86asm \
+    2>&1 | tee configure.log || (echo "=== Configure failed, showing log ===" && cat ffbuild/config.log && exit 1)
+
 RUN make -j$(nproc) && make install && strip $PREFIX/bin/ffmpeg
 
 FROM scratch
