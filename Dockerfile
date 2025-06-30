@@ -18,6 +18,23 @@ RUN curl -sSL https://zlib.net/zlib-1.3.1.tar.gz -o zlib.tar.gz && \
     tar --strip-components=1 -xzf zlib.tar.gz && \
     ./configure --prefix=$PREFIX --static && make -j$(nproc) && make install
 
+WORKDIR /build/libvpx
+RUN rm -rf * && \
+    git clone --depth=1 https://chromium.googlesource.com/webm/libvpx . && \
+    ./configure --prefix=$PREFIX \
+    --disable-examples --disable-unit-tests --disable-tools --disable-docs \
+    --enable-vp8 --enable-vp9 --enable-vp9-highbitdepth \
+    --enable-static --disable-shared --enable-pic \
+    --target=x86_64-linux-gcc \
+    --as=yasm \
+    --disable-runtime-cpu-detect \
+    --enable-postproc \
+    --enable-vp9-postproc \
+    --extra-cflags="$CFLAGS -fPIC" && \
+    make clean && make -j$(nproc) && make install
+
+RUN cat $PREFIX/lib/pkgconfig/vpx.pc
+
 WORKDIR /build/xvidcore
 RUN wget https://downloads.xvid.com/downloads/xvidcore-1.3.7.tar.gz
 RUN tar xzf xvidcore-1.3.7.tar.gz
@@ -56,21 +73,6 @@ RUN git clone https://bitbucket.org/multicoreware/x265_git . && \
     -DENABLE_ASSEMBLY=ON -DHIGH_BIT_DEPTH=ON -DMAIN12=ON -DENABLE_HDR10_PLUS=ON \
     -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_EXE_LINKER_FLAGS="$LDFLAGS" && \
     make -j$(nproc) && make install
-
-WORKDIR /build/libvpx
-RUN rm -rf * && \
-    git clone --depth=1 https://chromium.googlesource.com/webm/libvpx . && \
-    ./configure --prefix=$PREFIX \
-    --disable-examples --disable-unit-tests --disable-tools --disable-docs \
-    --enable-vp8 --enable-vp9 --enable-vp9-highbitdepth \
-    --enable-static --disable-shared --enable-pic \
-    --target=x86_64-linux-gcc \
-    --as=yasm \
-    --disable-runtime-cpu-detect \
-    --enable-postproc \
-    --enable-vp9-postproc \
-    --extra-cflags="$CFLAGS -fPIC" && \
-    make clean && make -j$(nproc) && make install
 
 WORKDIR /build/aom
 RUN git clone --depth=1 https://aomedia.googlesource.com/aom . && \
@@ -152,8 +154,7 @@ RUN echo "=== Manual libvpx configuration ===" && \
     echo "Manual libvpx test PASSED" && \
     rm test_manual test_manual.c
 
-RUN echo "=== FFmpeg configure dengan semua flag manual ===" && \
-    ./configure \
+RUN ./configure \
     --prefix=$PREFIX \
     --enable-gpl --enable-version3 --enable-nonfree \
     --enable-static --disable-shared \
@@ -173,27 +174,8 @@ RUN echo "=== FFmpeg configure dengan semua flag manual ===" && \
     --disable-autodetect \
     --enable-cross-compile \
     --arch=x86_64 \
-    --target-os=linux || \
-    ( \
-    echo "=== Configure failed, trying alternative method ===" && \
-    ./configure \
-    --prefix=$PREFIX \
-    --enable-gpl --enable-version3 --enable-nonfree \
-    --enable-static --disable-shared \
-    --disable-debug --disable-doc \
-    --disable-ffplay --disable-ffprobe \
-    --enable-libx264 --enable-libx265 \
-    --enable-libvpx \
-    --enable-libaom \
-    --enable-libfdk-aac --enable-libmp3lame \
-    --enable-libvorbis --enable-libxvid \
-    --enable-libwebp \
-    --extra-cflags="-O3 -I$PREFIX/include" \
-    --extra-ldflags="-static -L$PREFIX/lib" \
-    --extra-libs="-lpthread -lm -lz -lvpx" \
-    --disable-autodetect \
-    )
-
+    --target-os=linux 
+RUN cat ffbuild/config.log
 RUN make -j$(nproc) && make install && strip $PREFIX/bin/ffmpeg
 
 FROM scratch
