@@ -21,17 +21,17 @@ RUN curl -sSL https://zlib.net/zlib-1.3.1.tar.gz -o zlib.tar.gz && \
 WORKDIR /build/libvpx
 RUN rm -rf * && \
     git clone --depth=1 https://chromium.googlesource.com/webm/libvpx . && \
+    export LDFLAGS="-lpthread" && \
     ./configure --prefix=$PREFIX \
-    --disable-examples --disable-unit-tests --disable-tools --disable-docs \
-    --enable-vp8 --enable-vp9 --enable-vp9-highbitdepth \
-    --enable-static --disable-shared --enable-pic \
-    --target=x86_64-linux-gcc \
-    --as=yasm \
-    --disable-runtime-cpu-detect \
-    --enable-postproc \
-    --enable-vp9-postproc \
-    --extra-cflags="$CFLAGS -fPIC" \
-    --extra-ldflags="-lpthread" && \
+      --disable-examples --disable-unit-tests --disable-tools --disable-docs \
+      --enable-vp8 --enable-vp9 --enable-vp9-highbitdepth \
+      --enable-static --disable-shared --enable-pic \
+      --target=x86_64-linux-gcc \
+      --as=yasm \
+      --disable-runtime-cpu-detect \
+      --enable-postproc \
+      --enable-vp9-postproc \
+      --extra-cflags="$CFLAGS -fPIC" && \
     make clean && make -j$(nproc) && make install
     
 RUN cat $PREFIX/lib/pkgconfig/vpx.pc
