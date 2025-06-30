@@ -7,7 +7,7 @@ RUN apk add --no-cache --virtual .build-deps \
 
 ENV PREFIX="/usr/local"
 ENV PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:$PREFIX/lib/x86_64-linux-gnu/pkgconfig"
-ENV CFLAGS="-O3 -march=znver2 -mtune=znver2 -flto -ffunction-sections -fdata-sections -fomit-frame-pointer"
+ENV CFLAGS="-O3 -march=znver2 -mtune=znver2 -flto -ffunction-sections -fdata-sections -fomit-frame-pointer -fPIC"
 ENV CXXFLAGS="$CFLAGS"
 ENV LDFLAGS="-static -flto"
 
@@ -18,6 +18,31 @@ RUN curl -sSL https://zlib.net/zlib-1.3.1.tar.gz -o zlib.tar.gz && \
     tar --strip-components=1 -xzf zlib.tar.gz && \
     ./configure --prefix=$PREFIX --static && make -j$(nproc) && make install
 
+# Build libogg first (required by libvorbis)
+WORKDIR /build/libogg
+RUN wget https://downloads.xiph.org/releases/ogg/libogg-1.3.6.tar.gz && \
+    tar xzf libogg-1.3.6.tar.gz --strip-components=1 && \
+    ./configure --prefix=$PREFIX --disable-shared --enable-static \
+    CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" && \
+    make -j$(nproc) && make install
+
+# Build libvorbis (depends on libogg)
+WORKDIR /build/libvorbis
+RUN wget https://downloads.xiph.org/releases/vorbis/libvorbis-1.3.7.tar.gz && \
+    tar xzf libvorbis-1.3.7.tar.gz --strip-components=1 && \
+    ./configure --prefix=$PREFIX --disable-shared --enable-static \
+    --with-ogg=$PREFIX \
+    CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" \
+    PKG_CONFIG_PATH="$PKG_CONFIG_PATH" && \
+    make -j$(nproc) && make install
+
+# Verify vorbis pkg-config files
+RUN ls -la $PREFIX/lib/pkgconfig/vorbis* && \
+    pkg-config --exists vorbis && \
+    pkg-config --exists vorbisenc && \
+    echo "Vorbis libraries found successfully"
+
+WORKDIR /build/libvpx
 RUN rm -rf * && \
     git clone --depth=1 https://chromium.googlesource.com/webm/libvpx . && \
     LDFLAGS="-lpthread" ./configure --prefix=$PREFIX \
@@ -28,23 +53,21 @@ RUN rm -rf * && \
       --disable-runtime-cpu-detect \
       --enable-postproc \
       --enable-vp9-postproc \
-      --extra-cflags="$CFLAGS -fPIC" && \
+      --extra-cflags="$CFLAGS" && \
     make clean && make -j$(nproc) LDFLAGS="-lpthread" && make install
-    
-RUN cat $PREFIX/lib/pkgconfig/vpx.pc
-RUN nm -g --defined-only $PREFIX/lib/libvpx.a | grep vpx_codec_version || echo "Symbol tidak ditemukan"
 
 WORKDIR /build/xvidcore
-RUN wget https://downloads.xvid.com/downloads/xvidcore-1.3.7.tar.gz
-RUN tar xzf xvidcore-1.3.7.tar.gz
-RUN cd xvidcore/build/generic && \
-    ./configure --prefix=$PREFIX --disable-shared --enable-static CFLAGS="$CFLAGS -fPIC" && \
+RUN wget https://downloads.xvid.com/downloads/xvidcore-1.3.7.tar.gz && \
+    tar xzf xvidcore-1.3.7.tar.gz && \
+    cd xvidcore/build/generic && \
+    ./configure --prefix=$PREFIX --disable-shared --enable-static CFLAGS="$CFLAGS" && \
     make -j$(nproc) libxvidcore.a && \
     LIBXVIDCORE_A=$(find . -name 'libxvidcore.a' | head -n1) && \
     install -d $PREFIX/lib $PREFIX/include/xvid && \
     install -m644 "$LIBXVIDCORE_A" $PREFIX/lib/ && \
     cp -r ../../src/* $PREFIX/include/xvid/
     
+# Create xvid pkg-config file
 RUN echo "prefix=$PREFIX" > $PREFIX/lib/pkgconfig/xvid.pc && \
     echo "exec_prefix=\${prefix}" >> $PREFIX/lib/pkgconfig/xvid.pc && \
     echo "libdir=\${exec_prefix}/lib" >> $PREFIX/lib/pkgconfig/xvid.pc && \
@@ -75,7 +98,7 @@ RUN git clone https://bitbucket.org/multicoreware/x265_git . && \
 
 WORKDIR /build/aom
 RUN git clone --depth=1 https://aomedia.googlesource.com/aom . && \
-    cd build && \
+    mkdir -p build && cd build && \
     cmake .. -DCMAKE_INSTALL_PREFIX=$PREFIX -DCMAKE_BUILD_TYPE=Release \
     -DCONFIG_RUNTIME_CPU_DETECT=OFF -DAOM_TARGET_CPU=znver2 -DENABLE_SHARED=OFF \
     -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_EXE_LINKER_FLAGS="$LDFLAGS" \
@@ -96,6 +119,7 @@ RUN wget https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.ta
     CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" && \
     make -j$(nproc) && make install
 
+# Create lame pkg-config file
 RUN echo "prefix=$PREFIX" > $PREFIX/lib/pkgconfig/mp3lame.pc && \
     echo "exec_prefix=\${prefix}" >> $PREFIX/lib/pkgconfig/mp3lame.pc && \
     echo "libdir=\${exec_prefix}/lib" >> $PREFIX/lib/pkgconfig/mp3lame.pc && \
@@ -107,32 +131,15 @@ RUN echo "prefix=$PREFIX" > $PREFIX/lib/pkgconfig/mp3lame.pc && \
     echo "Libs: -L\${libdir} -lmp3lame" >> $PREFIX/lib/pkgconfig/mp3lame.pc && \
     echo "Cflags: -I\${includedir}/lame" >> $PREFIX/lib/pkgconfig/mp3lame.pc
 
-WORKDIR /build/libogg
-RUN wget https://downloads.xiph.org/releases/ogg/libogg-1.3.6.tar.gz && \
-    tar xzf libogg-1.3.6.tar.gz --strip-components=1 && \
-    ./configure --prefix=$PREFIX --disable-shared --enable-static \
-    CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" && \
-    make -j$(nproc) && make install
-
 WORKDIR /build/libwebp
-RUN git clone --depth=1 https://github.com/webmproject/libwebp.git .
-RUN ./autogen.sh && \
+RUN git clone --depth=1 https://github.com/webmproject/libwebp.git . && \
+    ./autogen.sh && \
     ./configure --prefix=$PREFIX \
       --disable-shared \
       --enable-static \
       CFLAGS="$CFLAGS -I$PREFIX/include" \
       LDFLAGS="$LDFLAGS -L$PREFIX/lib" && \
     make -j$(nproc) && make install
-
-WORKDIR /build/libvorbis
-RUN wget https://downloads.xiph.org/releases/vorbis/libvorbis-1.3.7.tar.gz && \
-    tar xzf libvorbis-1.3.7.tar.gz --strip-components=1 && \
-    ./configure --prefix=$PREFIX --disable-shared --enable-static \
-    CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" && \
-    make -j$(nproc) && make install
-
-WORKDIR /build/ffmpeg
-RUN git clone --depth=1 https://github.com/FFmpeg/FFmpeg.git .
 
 RUN echo "=== Patching FFmpeg configure to force libvpx detection ===" && \
     cp configure configure.orig && \
@@ -141,13 +148,12 @@ enabled libvpx && echo "libvpx enabled (forced)" || die "ERROR: libvpx not found
     echo 'enable libvpx' >> configure && \
     echo 'add_extralibs -lvpx -lm' >> configure
 
-ENV LIBVPX_CFLAGS="-I/usr/local/include"
-ENV LIBVPX_LIBS="-L/usr/local/lib -lvpx -lm"
-ENV VPX_CFLAGS="-I/usr/local/include"  
-ENV VPX_LIBS="-L/usr/local/lib -lvpx -lm"
+WORKDIR /build/ffmpeg
+RUN git clone --depth=1 https://github.com/FFmpeg/FFmpeg.git .
 
-RUN ./configure \
+RUN PKG_CONFIG="pkg-config --static" ./configure \
     --prefix=$PREFIX \
+    --pkg-config-flags="--static" \
     --enable-gpl --enable-version3 --enable-nonfree \
     --enable-static --disable-shared \
     --disable-debug --disable-doc \
@@ -160,10 +166,10 @@ RUN ./configure \
     --enable-lto --enable-avx2 \
     --enable-fma3 --enable-libwebp \
     --enable-inline-asm --enable-x86asm \
-    --extra-cflags="$CFLAGS -mavx2 -mfma -I$PREFIX/include -DHAVE_VPX=1" \
+    --extra-cflags="$CFLAGS -mavx2 -mfma -I$PREFIX/include" \
     --extra-ldflags="$LDFLAGS -L$PREFIX/lib" \
-    --extra-libs="-lpthread -lm -lz -lvpx" 
-RUN cat ffbuild/config.log
+    --extra-libs="-lpthread -lm -lz" 
+
 RUN make -j$(nproc) && make install && strip $PREFIX/bin/ffmpeg
 
 FROM scratch
