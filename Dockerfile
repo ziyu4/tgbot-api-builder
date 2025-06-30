@@ -26,7 +26,6 @@ RUN rm -rf * && \
       --disable-examples --disable-unit-tests --disable-tools --disable-docs \
       --enable-vp8 --enable-vp9 --enable-vp9-highbitdepth \
       --enable-static --disable-shared --enable-pic \
-      --target=x86_64-linux-gcc \
       --as=yasm \
       --disable-runtime-cpu-detect \
       --enable-postproc \
@@ -171,11 +170,7 @@ RUN ./configure \
     --enable-inline-asm --enable-x86asm \
     --extra-cflags="$CFLAGS -mavx2 -mfma -I$PREFIX/include -DHAVE_VPX=1" \
     --extra-ldflags="$LDFLAGS -L$PREFIX/lib" \
-    --extra-libs="-lpthread -lm -lz -lvpx" \
-    --disable-autodetect \
-    --enable-cross-compile \
-    --arch=x86_64 \
-    --target-os=linux 
+    --extra-libs="-lpthread -lm -lz -lvpx" 
 RUN cat ffbuild/config.log
 RUN make -j$(nproc) && make install && strip $PREFIX/bin/ffmpeg
 
