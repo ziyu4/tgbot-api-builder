@@ -30,9 +30,10 @@ RUN rm -rf * && \
     --disable-runtime-cpu-detect \
     --enable-postproc \
     --enable-vp9-postproc \
-    --extra-cflags="$CFLAGS -fPIC" && \
+    --extra-cflags="$CFLAGS -fPIC" \
+    --extra-ldflags="$LDFLAGS -lpthread" && \
     make clean && make -j$(nproc) && make install
-
+    
 RUN cat $PREFIX/lib/pkgconfig/vpx.pc
 
 WORKDIR /build/xvidcore
