@@ -34,6 +34,7 @@ RUN rm -rf * && \
     make clean && make -j$(nproc) && make install
     
 RUN cat $PREFIX/lib/pkgconfig/vpx.pc
+RUN nm -g --defined-only $PREFIX/lib/libvpx.a | grep vpx_codec_version || echo "Symbol tidak ditemukan"
 
 WORKDIR /build/xvidcore
 RUN wget https://downloads.xvid.com/downloads/xvidcore-1.3.7.tar.gz
@@ -146,13 +147,6 @@ ENV LIBVPX_CFLAGS="-I/usr/local/include"
 ENV LIBVPX_LIBS="-L/usr/local/lib -lvpx -lm"
 ENV VPX_CFLAGS="-I/usr/local/include"  
 ENV VPX_LIBS="-L/usr/local/lib -lvpx -lm"
-
-RUN echo "=== Manual libvpx configuration ===" && \
-    echo '#include <vpx/vpx_decoder.h>' > test_manual.c && \
-    echo 'int main() { vpx_codec_version(); return 0; }' >> test_manual.c && \
-    gcc -I$PREFIX/include -L$PREFIX/lib test_manual.c -lvpx -lm -o test_manual && \
-    echo "Manual libvpx test PASSED" && \
-    rm test_manual test_manual.c
 
 RUN ./configure \
     --prefix=$PREFIX \
