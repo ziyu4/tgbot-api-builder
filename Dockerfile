@@ -31,7 +31,7 @@ RUN rm -rf * && \
     --enable-postproc \
     --enable-vp9-postproc \
     --extra-cflags="$CFLAGS -fPIC" \
-    --extra-ldflags="$LDFLAGS -lpthread" && \
+    --extra-ldflags="-flto -lpthread" && \
     make clean && make -j$(nproc) && make install
     
 RUN cat $PREFIX/lib/pkgconfig/vpx.pc
