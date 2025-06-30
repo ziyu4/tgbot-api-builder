@@ -9,7 +9,7 @@ ENV PREFIX="/usr/local"
 ENV PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:$PREFIX/lib/x86_64-linux-gnu/pkgconfig"
 ENV CFLAGS="-O3 -march=znver2 -mtune=znver2 -flto -ffunction-sections -fdata-sections -fomit-frame-pointer"
 ENV CXXFLAGS="$CFLAGS"
-ENV LDFLAGS="-static -flto -Wl,--gc-sections"
+ENV LDFLAGS="-static -flto"
 
 FROM base AS build-core
 
@@ -18,11 +18,9 @@ RUN curl -sSL https://zlib.net/zlib-1.3.1.tar.gz -o zlib.tar.gz && \
     tar --strip-components=1 -xzf zlib.tar.gz && \
     ./configure --prefix=$PREFIX --static && make -j$(nproc) && make install
 
-WORKDIR /build/libvpx
 RUN rm -rf * && \
     git clone --depth=1 https://chromium.googlesource.com/webm/libvpx . && \
-    export LDFLAGS="-lpthread" && \
-    ./configure --prefix=$PREFIX \
+    LDFLAGS="-lpthread" ./configure --prefix=$PREFIX \
       --disable-examples --disable-unit-tests --disable-tools --disable-docs \
       --enable-vp8 --enable-vp9 --enable-vp9-highbitdepth \
       --enable-static --disable-shared --enable-pic \
@@ -31,7 +29,7 @@ RUN rm -rf * && \
       --enable-postproc \
       --enable-vp9-postproc \
       --extra-cflags="$CFLAGS -fPIC" && \
-    make clean && make -j$(nproc) && make install
+    make clean && make -j$(nproc) LDFLAGS="-lpthread" && make install
     
 RUN cat $PREFIX/lib/pkgconfig/vpx.pc
 RUN nm -g --defined-only $PREFIX/lib/libvpx.a | grep vpx_codec_version || echo "Symbol tidak ditemukan"
